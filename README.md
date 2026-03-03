@@ -2,7 +2,7 @@
 # F-- Programming Language 🚀
 
 [![Build Status](https://github.com/yourusername/FSharpMinus/workflows/.NET%20Build/badge.svg)]
-[![Test Status](https://github.com/yourusername/FSharpMinus/workflows/.NET%20Test/badge.svg)]
+[![Test Status](https://github.com/realmg51-cpu/FMinusMinus-programing-language/workflows/.NET%20Test/badge.svg)]
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)]
 [![NuGet Version](https://img.shields.io/nuget/v/FSharpMinus)]
 
