@@ -7,7 +7,7 @@ on:
   workflow_dispatch:  # Cho phép chạy tay
     inputs:
       version:
-        description: 'Version (VD: 1.4.0)'
+        description: 'This is a F-- Oficial Nuget Pack''
         required: true
         default: '1.0.0'
 
