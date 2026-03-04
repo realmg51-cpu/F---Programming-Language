@@ -1,8 +1,8 @@
 
 # F-- Programming Language 🚀
 
-[![Build Status](https://github.com/yourusername/FSharpMinus/workflows/.NET%20Build/badge.svg)]
-[![Test Status](https://github.com/realmg51-cpu/FMinusMinus-programing-language/workflows/.NET%20Test/badge.svg)]
+[![Build Status](https://github.com/realmg51-cpu/F---Programming-Language/workflows/.NET%20Build/badge.svg)]
+[![Test Status](https://github.com/realmg51-cpu/F--Programming-Language/workflows/.NET%20Test/badge.svg)]
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)]
 [![NuGet Version](https://img.shields.io/nuget/v/FSharpMinus)]
 
@@ -82,66 +82,3 @@ Lập trình viên 13 tuổi - Đam mê sáng tạo và code sạch!
 ---
 
 ⭐ Star repo này nếu bạn thấy F-- thú vị!
-
-```
-
-### 🎯 **Tạo file .gitignore hoàn chỉnh**:
-
-```gitignore
-# .NET
-bin/
-obj/
-*.exe
-*.dll
-*.pdb
-*.user
-*.suo
-*.cache
-*.ds_store
-*.swp
-*.swo
-packages/
-*.log
-
-# Test results
-TestResults/
-coverage/
-*.trx
-
-# IDE
-.vs/
-.vscode/
-*.userprefs
-*.[Oo]bj
-*.cr
-*.csproj.user
-
-# Build results
-[Dd]ebug/
-[Rr]elease/
-x64/
-build/
-[Bb]in/
-[Oo]bj/
-
-# NuGet
-.nuget/
-*.nupkg
-```
-
-🎨 Tạo logo cho F--:
-
-Tạo file logo.txt:
-
-```
-    ╔═══════════════════════════════╗
-    ║  ███████╗ ███████╗             ║
-    ║  ██╔════╝ ██╔════╝             ║
-    ║  █████╗   ███████╗             ║
-    ║  ██╔══╝   ╚════██║             ║
-    ║  ██║      ███████║             ║
-    ║  ╚═╝      ╚══════╝             ║
-    ║  F-- v1.4                      ║
-    ║  The backward step of humanity ║
-    ╚═══════════════════════════════╝
-```
