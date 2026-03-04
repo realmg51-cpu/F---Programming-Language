@@ -1,0 +1,69 @@
+name: 📦 Publish to NuGet
+
+on:
+  push:
+    tags:
+      - 'v*'  # Chỉ chạy khi push tag bắt đầu bằng 'v'
+  workflow_dispatch:  # Cho phép chạy tay
+    inputs:
+      version:
+        description: 'This is a F-- Oficial Nuget Pack''
+        required: true
+        default: '1.0.0'
+
+jobs:
+  publish:
+    name: 🚀 Publish
+    runs-on: ubuntu-latest
+    
+    steps:
+      - name: 📥 Checkout code
+        uses: actions/checkout@v4
+      
+      - name: 🔧 Setup .NET
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: 8.0.x
+      
+      - name: 🔢 Get version
+        id: version
+        run: |
+          if [ "${{ github.event_name }}" == "workflow_dispatch" ]; then
+            echo "VERSION=${{ github.event.inputs.version }}" >> $GITHUB_OUTPUT
+          else
+            # Lấy version từ tag (bỏ chữ 'v' ở đầu)
+            VERSION=${GITHUB_REF#refs/tags/v}
+            echo "VERSION=$VERSION" >> $GITHUB_OUTPUT
+          fi
+      
+      - name: 📦 Restore
+        run: dotnet restore
+      
+      - name: 🏗️ Build
+        run: dotnet build Compiler/compiler.csproj -c Release --no-restore
+      
+      - name: 🧪 Test
+        run: dotnet test Test/tests.csproj -c Release --no-build
+      
+      - name: 📦 Pack NuGet
+        run: |
+          dotnet pack Compiler/compiler.csproj \
+            -c Release \
+            --no-build \
+            -o nupkg \
+            -p:PackageVersion=${{ steps.version.outputs.VERSION }}
+      
+      - name: 📤 Push to NuGet
+        # ĐÃ SỬA: Dùng đúng tên secret NUGET_API_KEY
+        if: ${{ secrets.NUGET_API_KEY != '' }}
+        run: |
+          dotnet nuget push nupkg/*.nupkg \
+            --api-key ${{ secrets.NUGET_API_KEY }} \
+            --source https://api.nuget.org/v3/index.json \
+            --skip-duplicate
+      
+      - name: 📤 Upload artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: nupkg
+          path: nupkg/*.nupkg
