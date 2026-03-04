@@ -3,47 +3,67 @@ name: 📦 Publish to NuGet
 on:
   push:
     tags:
-      - 'v*'  # Chỉ chạy khi push tag bắt đầu bằng 'v'
-  workflow_dispatch:  # Cho phép chạy tay
+      - 'v*'
+  workflow_dispatch:
     inputs:
       version:
-        description: 'This is a F-- Oficial Nuget Pack''
+        description: 'F-- Official NuGet Package Version'
         required: true
         default: '1.0.0'
+      notes:
+        description: 'Release Notes'
+        required: false
+        default: ''
 
 jobs:
   publish:
-    name: 🚀 Publish
+    name: 🚀 Publish F-- v${{ github.event.inputs.version || github.ref_name }}
     runs-on: ubuntu-latest
+    permissions:
+      contents: write  # Cần để tạo release
+      packages: write  # Cần để push lên GitHub Packages
     
     steps:
       - name: 📥 Checkout code
         uses: actions/checkout@v4
+        with:
+          fetch-depth: 0  # Lấy full history cho version info
       
       - name: 🔧 Setup .NET
         uses: actions/setup-dotnet@v4
         with:
-          dotnet-version: 8.0.x
+          dotnet-version: |
+            8.0.x
+            7.0.x
       
       - name: 🔢 Get version
         id: version
         run: |
           if [ "${{ github.event_name }}" == "workflow_dispatch" ]; then
             echo "VERSION=${{ github.event.inputs.version }}" >> $GITHUB_OUTPUT
+            echo "TAG=v${{ github.event.inputs.version }}" >> $GITHUB_OUTPUT
           else
-            # Lấy version từ tag (bỏ chữ 'v' ở đầu)
             VERSION=${GITHUB_REF#refs/tags/v}
             echo "VERSION=$VERSION" >> $GITHUB_OUTPUT
+            echo "TAG=$GITHUB_REF_NAME" >> $GITHUB_OUTPUT
           fi
       
-      - name: 📦 Restore
+      - name: 📦 Restore with cache
+        uses: actions/cache@v3
+        with:
+          path: ~/.nuget/packages
+          key: ${{ runner.os }}-nuget-${{ hashFiles('**/*.csproj') }}
+          restore-keys: |
+            ${{ runner.os }}-nuget-
+      
+      - name: 📦 Restore dependencies
         run: dotnet restore
       
       - name: 🏗️ Build
         run: dotnet build Compiler/compiler.csproj -c Release --no-restore
       
       - name: 🧪 Test
-        run: dotnet test Test/tests.csproj -c Release --no-build
+        run: dotnet test Test/tests.csproj -c Release --no-build --verbosity minimal
       
       - name: 📦 Pack NuGet
         run: |
@@ -51,10 +71,10 @@ jobs:
             -c Release \
             --no-build \
             -o nupkg \
-            -p:PackageVersion=${{ steps.version.outputs.VERSION }}
+            -p:PackageVersion=${{ steps.version.outputs.VERSION }} \
+            -p:PackageReleaseNotes="${{ github.event.inputs.notes }}"
       
-      - name: 📤 Push to NuGet
-        # ĐÃ SỬA: Dùng đúng tên secret NUGET_API_KEY
+      - name: 📤 Push to NuGet.org
         if: ${{ secrets.NUGET_API_KEY != '' }}
         run: |
           dotnet nuget push nupkg/*.nupkg \
@@ -62,8 +82,24 @@ jobs:
             --source https://api.nuget.org/v3/index.json \
             --skip-duplicate
       
-      - name: 📤 Upload artifacts
-        uses: actions/upload-artifact@v4
+      - name: 📤 Push to GitHub Packages
+        if: ${{ secrets.GITHUB_TOKEN != '' }}
+        run: |
+          dotnet nuget push nupkg/*.nupkg \
+            --api-key ${{ secrets.GITHUB_TOKEN }} \
+            --source "https://nuget.pkg.github.com/${{ github.repository_owner }}/index.json" \
+            --skip-duplicate
+      
+      - name: 🏷️ Create GitHub Release
+        uses: softprops/action-gh-release@v1
         with:
-          name: nupkg
-          path: nupkg/*.nupkg
+          tag_name: ${{ steps.version.outputs.TAG }}
+          name: F-- v${{ steps.version.outputs.VERSION }}
+          body: |
+            ## 📦 F-- v${{ steps.version.outputs.VERSION }}
+            
+            ${{ github.event.inputs.notes || 'Auto-generated release' }}
+            
+            ### 🚀 Installation
+            ```bash
+            dotnet add package FSharpMinus --version ${{ steps.version.outputs.VERSION }}
