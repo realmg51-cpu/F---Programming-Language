@@ -1,7 +1,7 @@
 # 🚀 F-- (F Minus Minus) Programming Language
 
 [![.NET Build](https://github.com/realmg51-cpu/F---Programming-Language/actions/workflows/dotnet-build.yml/badge.svg?branch=main)](https://github.com/realmg51-cpu/F---Programming-Language/actions/workflows/dotnet-build.yml)
-[![.NET Test](https://github.com/realmg51-cpu/F---Programming-Language/actions/workflows/dotnet-test.yaml/badge.svg)](https://github.com/realmg51-cpu/F---Programming-Language/actions/workflows/dotnet-test.yaml)
+[![.NET Test](https://github.com/realmg51-cpu/F---Programming-Language/actions/workflows/dotnet-test.yaml/badge.svg)](https://github.com/realmg51-cpu/F---Programming-Language/actions/workflows/dotnet-test.yml)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
 [![GitHub stars](https://img.shields.io/github/stars/realmg51-cpu/F---Programming-Language?style=social)](https://github.com/realmg51-cpu/F---Programming-Language/stargazers)
 
