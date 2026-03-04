@@ -1,7 +1,7 @@
 
 # F-- Programming Language
 
-[![.NET Build](https://github.com/realmg51-cpu/FMinusMinus-programing-language/actions/workflows/dotnet-build.yml/badge.svg)](https://github.com/realmg51-cpu/FMinusMinus-programing-language/actions/workflows/dotnet-build.yml)
+[![.NET Build](https://github.com/realmg51-cpu/F---Programming-Language/workflows/dotnet-build.yml/badge.svg)](https://github.com/realmg51-cpu/FMinusMinus-programing-language/actions/workflows/dotnet-build.yml)
 [![.NET Test](https://github.com/realmg51-cpu/FMinusMinus-programing-language/actions/workflows/dotnet-test.yml/badge.svg)](https://github.com/realmg51-cpu/FMinusMinus-programing-language/actions/workflows/dotnet-test.yml)
 [![Code Coverage](https://codecov.io/gh/realmg51-cpu/FMinusMinus-programing-language/branch/main/graph/badge.svg)](https://codecov.io/gh/realmg51-cpu/FMinusMinus-programing-language)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)]
