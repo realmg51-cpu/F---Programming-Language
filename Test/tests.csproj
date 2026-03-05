@@ -1,3 +1,4 @@
+
 <Project Sdk="Microsoft.NET.Sdk">
 
   <PropertyGroup>
@@ -6,72 +7,32 @@
     <Nullable>enable</Nullable>
     <IsPackable>false</IsPackable>
     <IsTestProject>true</IsTestProject>
-    
-    <!-- Thoải mái đặt tên -->
-    <RootNamespace>FSharpMinus.Tests</RootNamespace>
-    <AssemblyName>FSharpMinus.Tests</AssemblyName>
-    
-    <!-- Test settings -->
-    <VSTestLogger>trx%3BLogFileName=TestResults.trx</VSTestLogger>
-    <VSTestResultsDirectory>$(MSBuildProjectDirectory)/TestResults</VSTestResultsDirectory>
-    <CollectCoverage>true</CollectCoverage>
-    <CoverletOutput>./coverage/</CoverletOutput>
-    <CoverletOutputFormat>lcov</CoverletOutputFormat>
   </PropertyGroup>
 
-  <!-- Include tất cả file test - siêu thoải mái! -->
   <ItemGroup>
-    <Compile Include="**/*.cs" Exclude="**/obj/**/*.cs;**/bin/**/*.cs" />
-  </ItemGroup>
-
-  <!-- Package references cho testing -->
-  <ItemGroup>
-    <!-- xUnit - framework test chính -->
     <PackageReference Include="Microsoft.NET.Test.Sdk" Version="17.8.0" />
     <PackageReference Include="xunit" Version="2.6.1" />
     <PackageReference Include="xunit.runner.visualstudio" Version="2.5.3">
       <IncludeAssets>runtime; build; native; contentfiles; analyzers; buildtransitive</IncludeAssets>
       <PrivateAssets>all</PrivateAssets>
     </PackageReference>
-    
-    <!-- Mocking -->
-    <PackageReference Include="Moq" Version="4.20.69" />
-    
-    <!-- Fluent Assertions - viết test dễ đọc hơn -->
-    <PackageReference Include="FluentAssertions" Version="6.12.0" />
-    
-    <!-- Code coverage -->
     <PackageReference Include="coverlet.collector" Version="6.0.0">
       <IncludeAssets>runtime; build; native; contentfiles; analyzers; buildtransitive</IncludeAssets>
       <PrivateAssets>all</PrivateAssets>
     </PackageReference>
-    <PackageReference Include="coverlet.msbuild" Version="6.0.0">
-      <PrivateAssets>all</PrivateAssets>
-      <IncludeAssets>runtime; build; native; contentfiles; analyzers</IncludeAssets>
-    </PackageReference>
   </ItemGroup>
 
-  <!-- Reference to F-- compiler -->
   <ItemGroup>
-    <ProjectReference Include="..\FSharpMinus.Compiler\FSharpMinus.Compiler.csproj" />
+    <ProjectReference Include="..\Compiler\compiler.csproj" />
   </ItemGroup>
 
-  <!-- Copy test files examples -->
-  <ItemGroup>
-    <None Include="TestFiles/**/*.f--" CopyToOutputDirectory="PreserveNewest" />
-  </ItemGroup>
+  <!-- 
+    KHÔNG DÙNG comment có chứa -- hoặc - ở cuối
+    Tất cả comments đều phải viết đúng cú pháp XML
+  -->
 
-  <!-- Custom test message - F-- style! -->
-  <Target Name="FMinusTestMessage" BeforeTargets="Build">
-    <Message Text="╔═══════════════════════════════════════╗" Importance="high" />
-    <Message Text="║   🧪 TESTING F-- COMPILER v1.4 🧪    ║" Importance="high" />
-    <Message Text="║    Kiểm tra chất lượng F-- lang      ║" Importance="high" />
-    <Message Text="╚═══════════════════════════════════════╝" Importance="high" />
-  </Target>
-
-  <!-- Generate test report -->
-  <Target Name="GenerateTestReport" AfterTargets="Test">
-    <Message Text="📊 Test results saved to: $(VSTestResultsDirectory)" Importance="high" />
-  </Target>
+  <!-- Thêm reference cho testing -->
+  <!-- Cấu hình coverage cho tests -->
+  <!-- File này chứa unit tests cho F-- compiler -->
 
 </Project>
