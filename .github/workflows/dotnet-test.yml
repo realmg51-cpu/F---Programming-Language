@@ -25,15 +25,28 @@ jobs:
       with:
         dotnet-version: 8.0.x
     
-    - name: 🔍 DEBUG - List all files
+    - name: 🔍 DEBUG - List files (Linux/macOS)
+      if: runner.os != 'Windows'
       run: |
         echo "=== Current directory: $(pwd) ==="
-        echo "=== All files and folders ==="
+        echo "=== All files ==="
         ls -la
-        echo "=== Test directory ==="
-        ls -la Test/ || echo "No Test directory"
         echo "=== Compiler directory ==="
         ls -la Compiler/ || echo "No Compiler directory"
+        echo "=== Test directory ==="
+        ls -la Test/ || echo "No Test directory"
+    
+    - name: 🔍 DEBUG - List files (Windows)
+      if: runner.os == 'Windows'
+      run: |
+        echo "=== Current directory: $(pwd) ==="
+        echo "=== All files ==="
+        dir
+        echo "=== Compiler directory ==="
+        if (Test-Path "Compiler") { dir Compiler } else { echo "No Compiler directory" }
+        echo "=== Test directory ==="
+        if (Test-Path "Test") { dir Test } else { echo "No Test directory" }
+      shell: powershell
     
     - name: 📦 Restore Compiler
       run: dotnet restore Compiler/compiler.csproj
