@@ -14,7 +14,7 @@ namespace Fminusminus.Tests
             var lexer = new Lexer(code);
             var tokens = lexer.ScanTokens();
             
-            Assert.Equal(3, tokens.Count); // IMPORT, COMPUTER, EOF
+            Assert.Equal(3, tokens.Count);
             Assert.Equal(TokenType.IMPORT, tokens[0].Type);
             Assert.Equal("import", tokens[0].Lexeme);
             Assert.Equal(TokenType.COMPUTER, tokens[1].Type);
@@ -124,7 +124,7 @@ start()
             var parser = new Parser(tokens);
             
             var exception = Record.Exception(() => parser.Parse());
-            Assert.Null(exception);
+            Assert.Null(exception);  // KHÔNG được có exception
         }
 
         [Fact]
