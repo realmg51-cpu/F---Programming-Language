@@ -77,7 +77,7 @@ start()
 }
 ```
 
-# 🚀 Installation
+## 🚀 Installation
 
 System Requirements
 
@@ -181,7 +181,7 @@ memory.memorytotal   // Check total memory
 
 ---
 
-🧪 Testing
+## 🧪 Testing
 
 Run the test suite to ensure everything works:
 
@@ -198,7 +198,7 @@ dotnet test --filter "FullyQualifiedName~LexerTests"
 
 ---
 
-📊 Code Coverage
+## 📊 Code Coverage
 
 https://codecov.io/gh/realmg51-cpu/F---Programming-Language/branch/main/graph/badge.svg
 
@@ -211,7 +211,7 @@ Level Coverage Status
 💚 Excellent 85% High quality
 
 ---
-🤝 Contributing
+## 🤝 Contributing
 
 All contributions are welcome! Here's how you can help:
 
@@ -241,7 +241,7 @@ git push origin feature/amazing-feature
 
 ---
 
-📜 License
+## 📜 License
 
 This project is licensed under the MIT License. See the LICENSE file for details.
 
@@ -257,7 +257,7 @@ in the Software without restriction...
 
 ---
 
-👨‍💻 Author
+## 👨‍💻 Author
 
 13-year-old developer - RealMG
 
