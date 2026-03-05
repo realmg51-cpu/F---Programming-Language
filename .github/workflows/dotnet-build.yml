@@ -2,18 +2,10 @@ name: 🔨 .NET Build
 
 on:
   push:
-    branches: [ main, develop ]
-    paths:
-      - 'Compiler/**'
-      - 'Test/**'
-      - '*.csproj'
+    branches: [ main ]
   pull_request:
     branches: [ main ]
-    paths:
-      - 'Compiler/**'
-      - 'Test/**'
-      - '*.csproj'
-  workflow_dispatch:  # Cho phép chạy tay
+  workflow_dispatch:
 
 jobs:
   build:
@@ -22,34 +14,38 @@ jobs:
     strategy:
       matrix:
         os: [ubuntu-latest, windows-latest, macos-latest]
-        dotnet: [8.0.x, 7.0.x]
-      fail-fast: false  # Tiếp tục build trên OS khác nếu 1 OS fail
+      fail-fast: false
     
     steps:
-      - name: 📥 Checkout code
-        uses: actions/checkout@v4
-        with:
-          fetch-depth: 0  # Lấy full history để kiểm tra version
-      
-      - name: 🔧 Setup .NET ${{ matrix.dotnet }}
-        uses: actions/setup-dotnet@v4
-        with:
-          dotnet-version: ${{ matrix.dotnet }}
-      
-      - name: 📦 Restore dependencies
-        run: dotnet restore
-      
-      - name: 🏗️ Build solution
-        run: dotnet build --configuration Release --no-restore
-      
-      - name: 📤 Upload build artifacts
-        uses: actions/upload-artifact@v4
-        with:
-          name: build-${{ matrix.os }}-${{ matrix.dotnet }}
-          path: |
-            Compiler/bin/Release/
-            Test/bin/Release/
-          retention-days: 7
-      
-      - name: ✅ Build success
-        run: echo "✅ Build thành công trên ${{ matrix.os }} với .NET ${{ matrix.dotnet }}!"
+    - name: 📥 Checkout code
+      uses: actions/checkout@v4
+    
+    - name: 🔧 Setup .NET
+      uses: actions/setup-dotnet@v4
+      with:
+        dotnet-version: 8.0.x
+    
+    - name: 🔍 DEBUG - List files
+      run: |
+        echo "=== Current directory: $(pwd) ==="
+        echo "=== All files ==="
+        ls -la
+        echo "=== Compiler directory ==="
+        ls -la Compiler/ || echo "No Compiler directory"
+        echo "=== Test directory ==="
+        ls -la Test/ || echo "No Test directory"
+    
+    - name: 📦 Restore Compiler
+      run: dotnet restore Compiler/compiler.csproj
+    
+    - name: 🏗️ Build Compiler
+      run: dotnet build Compiler/compiler.csproj -c Release --no-restore
+    
+    - name: 📦 Restore Tests
+      run: dotnet restore Test/tests.csproj
+    
+    - name: 🏗️ Build Tests
+      run: dotnet build Test/tests.csproj -c Release --no-restore
+    
+    - name: ✅ Build success
+      run: echo "✅ Build thành công trên ${{ matrix.os }}!"
