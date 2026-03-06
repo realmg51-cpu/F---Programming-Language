@@ -206,8 +206,11 @@ We use Codecov to monitor code quality. Current coverage: 0%???
 
 Level Coverage Status
 🔴 Poor < 60% Needs urgent testing
+
 🟡 Average 60-75% Acceptable
+
 🟢 Good 75-85% Stable
+
 💚 Excellent 85% High quality
 
 ---
@@ -215,9 +218,11 @@ Level Coverage Status
 
 All contributions are welcome! Here's how you can help:
 
-1. 🐛 Report bugs: Create a new Issue
-2. 💡 Suggest features: Share ideas through Issues
-3. 🔧 Submit Pull Request: Fork the repo and create a PR
+1. 🐛 Report bugs: Create a new [Issue](.../.../Issues)
+
+2. 💡 Suggest features: Share ideas through [Issue](.../.../Issues)
+
+3. 🔧 Submit Pull Request: Fork the repo and create a [Pull Request](.../.../pullrequest)
 
 Development Setup
 
