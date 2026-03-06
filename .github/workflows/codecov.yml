@@ -1,55 +1,41 @@
 name: 📊 Code Coverage
-
 on:
-  push:
-    branches: [ main ]
-  pull_request:
-    branches: [ main ]
-  workflow_dispatch:
+  push: { branches: [main] }
+  pull_request: { branches: [main] }
 
 jobs:
   codecov:
-    name: 📊 Code Coverage
     runs-on: ubuntu-latest
-    
     steps:
-      - name: 📥 Checkout code
-        uses: actions/checkout@v4
+      - uses: actions/checkout@v4
       
-      - name: 🔧 Setup .NET
-        uses: actions/setup-dotnet@v4
-        with:
-          dotnet-version: |
-            8.0.x
+      - uses: actions/setup-dotnet@v4
+        with: { dotnet-version: '8.0.x' }
       
-      - name: 🔍 DEBUG - List files
-        run: |
-          echo "=== Current directory: $(pwd) ==="
-          echo "=== All files ==="
-          ls -la
-          echo "=== Compiler directory ==="
-          ls -la Compiler/ || echo "No Compiler directory"
-      
-      - name: 📦 Restore Compiler
+      - name: 📦 Restore
         run: dotnet restore Compiler/compiler.csproj
       
-      - name: 🏗️ Build Compiler
-        run: dotnet build Compiler/compiler.csproj -c Release --no-restore
+      - name: 🏗️ Build
+        run: dotnet build Compiler/compiler.csproj -c Release
       
-      - name: 📊 Find coverage files
+      - name: 🧪 Test with coverage
         run: |
-          echo "=== Looking for coverage files ==="
-          find . -name "*.cobertura.xml" -o -name "*.xml" | while read file; do
-            echo "Found: $file"
-            ls -la "$file"
-          done
+          dotnet test Compiler/compiler.csproj \
+            -c Release \
+            --collect:"XPlat Code Coverage" \
+            --results-directory ./TestResults \
+            --settings .runsettings \
+            --logger "trx;LogFileName=test_results.trx"
+      
+      - name: 🔍 Find coverage files
+        run: find ./TestResults -name "*.cobertura.xml" -ls
       
       - name: ☁️ Upload to Codecov
-        uses: codecov/codecov-action@v4
+        uses: codecov/codecov-action@v5  # Nên dùng v5 mới nhất
         with:
-          files: ./coverage/**/coverage.cobertura.xml
+          token: ${{ secrets.CODECOV_TOKEN }}
+          files: ./TestResults/**/coverage.cobertura.xml
           flags: unittests
           name: F-- Code Coverage
-          token: ${{ secrets.CODECOV_TOKEN }}
-          fail_ci_if_error: false
+          fail_ci_if_error: true
           verbose: true
