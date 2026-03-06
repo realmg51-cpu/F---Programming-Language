@@ -202,7 +202,7 @@ dotnet test --filter "FullyQualifiedName~LexerTests"
 
 https://codecov.io/gh/realmg51-cpu/F---Programming-Language/branch/main/graph/badge.svg
 
-We use Codecov to monitor code quality. Current coverage: ~85%
+We use Codecov to monitor code quality. Current coverage: 0%???
 
 Level Coverage Status
 🔴 Poor < 60% Needs urgent testing
@@ -294,22 +294,6 @@ Last updated: March 2026
 <div align="center">
   <sub>Built with ☕ and curiosity</sub>
 </div>
-```
 
 ---
 
-🚀 Các bước cập nhật:
-
-```bash
-# Clone repo
-git clone https://github.com/realmg51-cpu/F---Programming-Language.git
-cd F---Programming-Language
-
-# Tạo file README.md mới
-# Copy nội dung trên vào
-
-# Commit và push
-git add README.md
-git commit -m "Update README with comprehensive documentation"
-git push origin main
-```
