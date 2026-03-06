@@ -65,26 +65,24 @@ Built entirely with **.NET**, F-- aims to make programming fun, intuitive, and a
 
 Here's a complete F-- program that demonstrates the language's power and simplicity:
 
-```
+```f--
 import computer
-
 start()
 {
-    // Variable declaration
+    # Variable declaration
     name = "F--"
     version = alpha0
-   
     luckyNumber = 42
-    
-    // Print with interpolation
+
+    # Print with interpolation
     println($"Hello from {name} v{version}!")
     println($"Memory left: {memory.memoryleft} MB")
-    
-    // Simple calculation
+
+    # Simple calculation
     result = luckyNumber * 2
     println($"The answer to everything multiplied by 2 is: {result}")
-    
-    // File operations
+
+    # File operations
     io.cfile("hello"(path "txt"))
     at "hello.txt"
     {
@@ -93,17 +91,17 @@ start()
         io.println($"Today's lucky number: {luckyNumber}")
         io.save()
     }
-    
+
     println("✅ File created successfully!")
-    
-    return(0)  // Success
-    end()      // End program
+
+    return(0)  # Success
+    end()      # End program
 }
 ```
 
 **Output:**
 ```
-Hello from F-- alpha0
+Hello from F-- alpha0!
 Memory left: 7823 MB
 The answer to everything multiplied by 2 is: 84
 ✅ File created successfully!
