@@ -222,7 +222,7 @@ All contributions are welcome! Here's how you can help:
 
 2. 💡 Suggest features: Share ideas through [Issue](.../.../Issues)
 
-3. 🔧 Submit Pull Request: Fork the repo and create a [Pull Request](.../.../pullrequest)
+3. 🔧 Submit Pull Request: Fork the repo and create a [Pull Request](.../.../pull)
 
 Development Setup
 
