@@ -1,0 +1,18 @@
+import computer
+start()
+{
+    println("=== F-- Memory Management Demo ===")
+    println()
+    
+    // Check memory status
+    println("📊 Memory Information:")
+    println($"   Total Memory: {memory.memorytotal} MB")
+    println($"   Used Memory:  {memory.memoryused} MB")
+    println($"   Free Memory:  {memory.memoryleft} MB")
+    
+    println()
+    println("💡 Tip: Memory is automatically managed by F--")
+    
+    return(0)
+    end()
+}
