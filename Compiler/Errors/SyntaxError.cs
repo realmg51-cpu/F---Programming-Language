@@ -11,7 +11,7 @@ namespace Fminusminus.Errors
         public int Column { get; }
         public string Symbol { get; }
         public string ErrorCode { get; }
-        public string SourceLine { get; set; }
+        public string? SourceLine { get; set; }  // 👈 THÊM ?
 
         public SyntaxError(string message, int line, int col, string symbol, string code = "FMM100") 
             : base($"[{code}] {message}")
