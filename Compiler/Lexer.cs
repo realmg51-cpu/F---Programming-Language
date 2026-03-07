@@ -7,13 +7,24 @@ namespace Fminusminus
 {
     public enum TokenType
     {
+        // Keywords
         IMPORT, COMPUTER, START, RETURN, END,
         PRINT, PRINTLN, AT, IO, MEMORY,
+        
+        // Literals
         IDENTIFIER, STRING, STRING_INTERPOLATED, NUMBER,
+        
+        // Punctuation
         LPAREN, RPAREN, LBRACE, RBRACE, LBRACKET, RBRACKET,
         DOT, COMMA, SEMICOLON, COLON, ASSIGN,
+        
+        // Operators
         PLUS, MINUS, STAR, SLASH, PERCENT,
+        
+        // Comparison
         EQUAL, NOT_EQUAL, LESS, LESS_EQUAL, GREATER, GREATER_EQUAL,
+        
+        // Special
         NEWLINE, COMMENT, EOF, ERROR
     }
 
@@ -21,7 +32,7 @@ namespace Fminusminus
     {
         public TokenType Type { get; }
         public string Lexeme { get; }
-        public object? Literal { get; }  // 👈 THÊM ?
+        public object? Literal { get; }
         public int Line { get; }
         public int Column { get; }
 
@@ -83,6 +94,7 @@ namespace Fminusminus
                 catch (SyntaxError ex)
                 {
                     _errors.Add(ex);
+                    // Recovery - skip to next line
                     while (!IsAtEnd() && Peek() != '\n') Advance();
                 }
             }
@@ -101,6 +113,7 @@ namespace Fminusminus
 
             switch (c)
             {
+                // Single character tokens
                 case '(': AddToken(TokenType.LPAREN); break;
                 case ')': AddToken(TokenType.RPAREN); break;
                 case '{': AddToken(TokenType.LBRACE); break;
@@ -112,6 +125,7 @@ namespace Fminusminus
                 case ';': AddToken(TokenType.SEMICOLON); break;
                 case ':': AddToken(TokenType.COLON); break;
                 
+                // Operators
                 case '+': AddToken(TokenType.PLUS); break;
                 case '-': 
                     if (Match('-'))
@@ -120,19 +134,33 @@ namespace Fminusminus
                         AddToken(TokenType.MINUS);
                     break;
                 case '*': AddToken(TokenType.STAR); break;
-                case '/': 
+                
+                // Comments and division
+                case '/':
                     if (Match('/'))
                     {
+                        // Single-line comment // until end of line
                         while (Peek() != '\n' && !IsAtEnd()) Advance();
-                        AddToken(TokenType.COMMENT);
+                        string commentText = _source.Substring(_start + 2, _current - _start - 2);
+                        AddToken(TokenType.COMMENT, commentText);
                     }
                     else
                     {
                         AddToken(TokenType.SLASH);
                     }
                     break;
+                
+                // Hash comment (Python style)
+                case '#':
+                    // Single-line comment # until end of line
+                    while (Peek() != '\n' && !IsAtEnd()) Advance();
+                    string hashComment = _source.Substring(_start + 1, _current - _start - 1);
+                    AddToken(TokenType.COMMENT, hashComment);
+                    break;
+                
                 case '%': AddToken(TokenType.PERCENT); break;
                 
+                // Assignment and equality
                 case '=': 
                     if (Match('='))
                         AddToken(TokenType.EQUAL);
@@ -140,14 +168,13 @@ namespace Fminusminus
                         AddToken(TokenType.ASSIGN);
                     break;
                 
-                // 👇 ĐÃ SỬA - THÊM BREAK
+                // Comparison
                 case '!':
                     if (Match('='))
                         AddToken(TokenType.NOT_EQUAL);
                     else
                         throw SyntaxError.UnexpectedSymbol(_line, _column, c);
-                    break;  // 👈 THÊM BREAK QUAN TRỌNG!
-                
+                    break;
                 case '<':
                     AddToken(Match('=') ? TokenType.LESS_EQUAL : TokenType.LESS);
                     break;
@@ -155,10 +182,12 @@ namespace Fminusminus
                     AddToken(Match('=') ? TokenType.GREATER_EQUAL : TokenType.GREATER);
                     break;
                 
+                // String literals
                 case '"':
                     StringLiteral();
                     break;
                 
+                // String interpolation
                 case '$':
                     if (Peek() == '"')
                     {
@@ -171,9 +200,11 @@ namespace Fminusminus
                     }
                     break;
                 
+                // Whitespace
                 case ' ':
                 case '\r':
                 case '\t':
+                    // Ignore whitespace
                     break;
                 case '\n':
                     _line++;
@@ -214,7 +245,7 @@ namespace Fminusminus
             
             if (Peek() == '.' && char.IsDigit(PeekNext()))
             {
-                Advance();
+                Advance(); // consume '.'
                 while (char.IsDigit(Peek())) Advance();
                 
                 if (!double.TryParse(_source.Substring(_start, _current - _start), out double value))
@@ -258,7 +289,7 @@ namespace Fminusminus
             if (IsAtEnd())
                 throw SyntaxError.UnterminatedString(_line, _column);
             
-            Advance();
+            Advance(); // consume closing "
             AddToken(TokenType.STRING, sb.ToString());
         }
 
@@ -305,7 +336,7 @@ namespace Fminusminus
             if (IsAtEnd())
                 throw SyntaxError.UnterminatedString(_line, _column);
             
-            Advance();
+            Advance(); // consume closing "
             AddToken(TokenType.STRING_INTERPOLATED, sb.ToString());
         }
 
@@ -343,7 +374,7 @@ namespace Fminusminus
             return _source[_current - 1];
         }
 
-        private void AddToken(TokenType type, object? literal = null)  // 👈 THÊM ?
+        private void AddToken(TokenType type, object? literal = null)
         {
             string text = _source.Substring(_start, _current - _start);
             _tokens.Add(new Token(type, text, literal, _line, _column - text.Length));
