@@ -24,10 +24,11 @@ namespace Fminusminus
     {
         public List<string> ImportedPackages { get; set; } = new();
         public StartBlockNode? StartBlock { get; set; }
+        public bool HasImportComputer { get; set; }
         
         public override void Print(int indent = 0)
         {
-            Console.WriteLine($"{new string(' ', indent)}Program");
+            Console.WriteLine($"{new string(' ', indent)}Program (import computer: {HasImportComputer})");
             foreach (var pkg in ImportedPackages)
                 Console.WriteLine($"{new string(' ', indent + 2)}IMPORT {pkg}");
             StartBlock?.Print(indent + 2);
@@ -41,10 +42,11 @@ namespace Fminusminus
     {
         public List<StatementNode> Statements { get; set; } = new();
         public bool HasReturn { get; set; }
+        public bool HasEnd { get; set; }
         
         public override void Print(int indent = 0)
         {
-            Console.WriteLine($"{new string(' ', indent)}StartBlock");
+            Console.WriteLine($"{new string(' ', indent)}StartBlock (return: {HasReturn}, end: {HasEnd})");
             foreach (var stmt in Statements)
                 stmt.Print(indent + 2);
         }
@@ -97,6 +99,17 @@ namespace Fminusminus
     }
 
     /// <summary>
+    /// End statement: end()
+    /// </summary>
+    public class EndStatementNode : StatementNode
+    {
+        public override void Print(int indent = 0)
+        {
+            Console.WriteLine($"{new string(' ', indent)}END()");
+        }
+    }
+
+    /// <summary>
     /// Assignment: variable = value
     /// </summary>
     public class AssignmentNode : StatementNode
@@ -112,9 +125,9 @@ namespace Fminusminus
     }
 
     /// <summary>
-    /// Computer call node
+    /// Package call: computer.os()
     /// </summary>
-    public class ComputerCallNode : StatementNode
+    public class PackageCallNode : StatementNode
     {
         public string PackageName { get; set; } = string.Empty;
         public string MethodName { get; set; } = string.Empty;
@@ -122,7 +135,7 @@ namespace Fminusminus
         
         public override void Print(int indent = 0)
         {
-            Console.WriteLine($"{new string(' ', indent)}CALL {PackageName}.{MethodName}()");
+            Console.WriteLine($"{new string(' ', indent)}PACKAGE CALL: {PackageName}.{MethodName}()");
             foreach (var arg in Arguments)
                 arg.Print(indent + 2);
         }
@@ -143,6 +156,49 @@ namespace Fminusminus
             Console.WriteLine($"{new string(' ', indent + 2)}BLOCK");
             foreach (var stmt in Statements)
                 stmt.Print(indent + 4);
+        }
+    }
+
+    /// <summary>
+    /// IO statement: io.read("file.txt")
+    /// </summary>
+    public class IOStatementNode : StatementNode
+    {
+        public string Operation { get; set; } = string.Empty;
+        public List<ExpressionNode> Parameters { get; set; } = new();
+        
+        public override void Print(int indent = 0)
+        {
+            Console.WriteLine($"{new string(' ', indent)}IO.{Operation}()");
+            foreach (var param in Parameters)
+                param.Print(indent + 2);
+        }
+    }
+
+    /// <summary>
+    /// Computer statement: computer.systeminfo.get()
+    /// </summary>
+    public class ComputerStatementNode : StatementNode
+    {
+        public string Property { get; set; } = string.Empty;
+        public string Operation { get; set; } = string.Empty;
+        
+        public override void Print(int indent = 0)
+        {
+            Console.WriteLine($"{new string(' ', indent)}COMPUTER.{Property}.{Operation}()");
+        }
+    }
+
+    /// <summary>
+    /// Memory statement: memory.memoryleft
+    /// </summary>
+    public class MemoryStatementNode : StatementNode
+    {
+        public string Property { get; set; } = string.Empty;
+        
+        public override void Print(int indent = 0)
+        {
+            Console.WriteLine($"{new string(' ', indent)}MEMORY.{Property}");
         }
     }
 
@@ -212,6 +268,30 @@ namespace Fminusminus
         public override void Print(int indent = 0)
         {
             Console.WriteLine($"{new string(' ', indent)}NULL");
+        }
+    }
+
+    /// <summary>
+    /// Binary operation: left + right, left - right, etc.
+    /// </summary>
+    public class BinaryOperationNode : ExpressionNode
+    {
+        public ExpressionNode Left { get; set; }
+        public TokenType Operator { get; set; }
+        public ExpressionNode Right { get; set; }
+        
+        public BinaryOperationNode(ExpressionNode left, TokenType op, ExpressionNode right)
+        {
+            Left = left;
+            Operator = op;
+            Right = right;
+        }
+        
+        public override void Print(int indent = 0)
+        {
+            Console.WriteLine($"{new string(' ', indent)}BINARY OP: {Operator}");
+            Left.Print(indent + 2);
+            Right.Print(indent + 2);
         }
     }
 }
