@@ -1,6 +1,7 @@
 using System;
 using System.Collections.Generic;
 using System.Linq;
+using System.Threading;
 
 namespace Fminusminus.Utils.Package
 {
@@ -13,28 +14,33 @@ namespace Fminusminus.Utils.Package
         public override string Version => "1.0.0";
         public override string Description => "Secure dictionary operations for F--";
         
+        private readonly object _dictLock = new object();
         private Dictionary<string, Dictionary<string, object>> _dictionaries = new();
         
         private const int MaxDictCount = 100;
         private const int MaxDictSize = 10000;
         private const int MaxKeyLength = 256;
         private const int MaxValueLength = 10000;
+        private const int MaxDisplayItems = 20;
         
-        private int _totalOperations;
-        private const int MaxOperations = 100000;
+        // Rate limiting
+        private readonly object _rateLock = new object();
+        private DateTime _rateLimitReset = DateTime.UtcNow.AddHours(1);
+        private int _operationsThisPeriod = 0;
+        private const int MaxOperationsPerPeriod = 100000;
 
         public override void Initialize()
         {
-            _methods["Create"] = args =>
+            base.Initialize();
+            
+            RegisterMethod("Create", args => 
             {
                 if (args.Length > 0 && args[0] is string name)
-                {
                     return CreateDictionary(name);
-                }
                 return false;
-            };
+            }, 1, 1, "Create a new dictionary");
             
-            _methods["Set"] = args =>
+            RegisterMethod("Set", args =>
             {
                 if (args.Length >= 3 && args[0] is string dictName && 
                     args[1] is string key)
@@ -42,9 +48,9 @@ namespace Fminusminus.Utils.Package
                     return Set(dictName, key, args[2]);
                 }
                 return false;
-            };
+            }, 3, 3, "Set a key-value pair");
             
-            _methods["Get"] = args =>
+            RegisterMethod("Get", args =>
             {
                 if (args.Length >= 2 && args[0] is string dictName && 
                     args[1] is string key)
@@ -52,9 +58,9 @@ namespace Fminusminus.Utils.Package
                     return Get(dictName, key);
                 }
                 return null;
-            };
+            }, 2, 2, "Get value by key");
             
-            _methods["Has"] = args =>
+            RegisterMethod("Has", args =>
             {
                 if (args.Length >= 2 && args[0] is string dictName && 
                     args[1] is string key)
@@ -62,9 +68,9 @@ namespace Fminusminus.Utils.Package
                     return Has(dictName, key);
                 }
                 return false;
-            };
+            }, 2, 2, "Check if key exists");
             
-            _methods["Remove"] = args =>
+            RegisterMethod("Remove", args =>
             {
                 if (args.Length >= 2 && args[0] is string dictName && 
                     args[1] is string key)
@@ -72,88 +78,115 @@ namespace Fminusminus.Utils.Package
                     return Remove(dictName, key);
                 }
                 return false;
-            };
+            }, 2, 2, "Remove a key-value pair");
             
-            _methods["Clear"] = args =>
+            RegisterMethod("Clear", args =>
             {
                 if (args.Length > 0 && args[0] is string dictName)
                 {
                     Clear(dictName);
                 }
                 return null;
-            };
+            }, 1, 1, "Clear all items");
             
-            _methods["Keys"] = args =>
+            RegisterMethod("Keys", args =>
             {
                 if (args.Length > 0 && args[0] is string dictName)
                 {
                     return GetKeys(dictName);
                 }
                 return Array.Empty<string>();
-            };
+            }, 1, 1, "Get all keys");
             
-            _methods["Values"] = args =>
+            RegisterMethod("Values", args =>
             {
                 if (args.Length > 0 && args[0] is string dictName)
                 {
                     return GetValues(dictName);
                 }
                 return Array.Empty<object>();
-            };
+            }, 1, 1, "Get all values");
             
-            _methods["Count"] = args =>
+            RegisterMethod("Count", args =>
             {
                 if (args.Length > 0 && args[0] is string dictName)
                 {
                     return GetCount(dictName);
                 }
                 return 0;
-            };
+            }, 1, 1, "Get item count");
             
-            _methods["Print"] = args =>
+            RegisterMethod("Print", args =>
             {
                 if (args.Length > 0 && args[0] is string dictName)
                 {
                     PrintDictionary(dictName);
                 }
                 return null;
-            };
+            }, 1, 1, "Print dictionary contents");
             
-            _methods["Exists"] = args =>
+            RegisterMethod("Exists", args =>
             {
                 if (args.Length > 0 && args[0] is string dictName)
                 {
                     return DictionaryExists(dictName);
                 }
                 return false;
-            };
+            }, 1, 1, "Check if dictionary exists");
+            
+            RegisterMethod("Delete", args =>
+            {
+                if (args.Length > 0 && args[0] is string dictName)
+                {
+                    return DeleteDictionary(dictName);
+                }
+                return false;
+            }, 1, 1, "Delete entire dictionary");
+            
+            LogInfo("Dictionary package initialized");
         }
 
         private bool CheckRateLimit()
         {
-            if (_totalOperations++ > MaxOperations)
+            lock (_rateLock)
             {
-                Console.WriteLine("⚠️ Too many dictionary operations. Please slow down.");
-                return false;
+                // Reset counter every hour
+                if (DateTime.UtcNow > _rateLimitReset)
+                {
+                    _operationsThisPeriod = 0;
+                    _rateLimitReset = DateTime.UtcNow.AddHours(1);
+                }
+                
+                if (_operationsThisPeriod++ > MaxOperationsPerPeriod)
+                {
+                    LogWarning("Too many dictionary operations. Please wait.");
+                    return false;
+                }
+                
+                return true;
             }
-            return true;
         }
 
         private bool ValidateKey(string key)
         {
-            if (string.IsNullOrEmpty(key))
+            if (string.IsNullOrWhiteSpace(key))
+            {
+                LogWarning("Key cannot be empty");
                 return false;
+            }
                 
             if (key.Length > MaxKeyLength)
             {
-                Console.WriteLine($"⚠️ Key too long (max {MaxKeyLength} characters)");
+                LogWarning($"Key too long (max {MaxKeyLength} characters)");
                 return false;
             }
             
             // Block keys that could be used for injection
-            if (key.Contains("..") || key.Contains("/") || key.Contains("\\"))
+            if (key.Contains("..") || key.Contains("/") || key.Contains("\\") || 
+                key.Contains(":") || key.Contains("*") || key.Contains("?") ||
+                key.Contains("<") || key.Contains(">") || key.Contains("|"))
             {
-                Console.WriteLine("⚠️ Invalid key characters");
+                LogWarning("Invalid key characters");
                 return false;
             }
             
@@ -167,172 +200,290 @@ namespace Fminusminus.Utils.Package
             string strValue = value.ToString() ?? "";
             if (strValue.Length > MaxValueLength)
             {
-                Console.WriteLine($"⚠️ Value too long (max {MaxValueLength} characters)");
+                LogWarning($"Value too long (max {MaxValueLength} characters)");
                 return false;
             }
             
             return true;
         }
 
+        private object CloneValue(object? value)
+        {
+            if (value == null) return null!;
+            
+            // Handle primitive types and strings
+            if (value is string str)
+                return str;
+                
+            if (value.GetType().IsPrimitive)
+                return value;
+            
+            // For complex types, serialize to string to avoid reference leaks
+            try
+            {
+                return System.Text.Json.JsonSerializer.Serialize(value);
+            }
+            catch
+            {
+                return value.ToString() ?? "";
+            }
+        }
+
         private bool CreateDictionary(string name)
         {
-            if (!CheckRateLimit()) return false;
-
-            if (_dictionaries.Count >= MaxDictCount)
+            if (string.IsNullOrWhiteSpace(name))
             {
-                Console.WriteLine($"⚠️ Maximum number of dictionaries reached ({MaxDictCount})");
+                LogWarning("Dictionary name cannot be empty");
                 return false;
             }
-
+            
+            if (!CheckRateLimit()) return false;
             if (!ValidateKey(name)) return false;
 
-            if (!_dictionaries.ContainsKey(name))
+            lock (_dictLock)
             {
-                _dictionaries[name] = new Dictionary<string, object>();
-                Console.WriteLine($"📚 Created dictionary: '{name}'");
-                return true;
+                if (_dictionaries.Count >= MaxDictCount)
+                {
+                    LogWarning($"Maximum number of dictionaries reached ({MaxDictCount})");
+                    return false;
+                }
+
+                if (!_dictionaries.ContainsKey(name))
+                {
+                    _dictionaries[name] = new Dictionary<string, object>();
+                    LogInfo($"Created dictionary: '{name}'");
+                    return true;
+                }
             }
             
-            Console.WriteLine($"⚠️ Dictionary '{name}' already exists");
+            LogWarning($"Dictionary '{name}' already exists");
             return false;
         }
 
         private bool Set(string dictName, string key, object? value)
         {
+            if (string.IsNullOrWhiteSpace(dictName))
+            {
+                LogWarning("Dictionary name cannot be empty");
+                return false;
+            }
+            
             if (!CheckRateLimit()) return false;
             if (!ValidateKey(key)) return false;
             if (!ValidateValue(value)) return false;
 
-            if (_dictionaries.TryGetValue(dictName, out var dict))
+            lock (_dictLock)
             {
-                if (dict.Count >= MaxDictSize)
+                if (_dictionaries.TryGetValue(dictName, out var dict))
                 {
-                    Console.WriteLine($"⚠️ Dictionary '{dictName}' is full (max {MaxDictSize} items)");
-                    return false;
-                }
+                    if (dict.Count >= MaxDictSize)
+                    {
+                        LogWarning($"Dictionary '{dictName}' is full (max {MaxDictSize} items)");
+                        return false;
+                    }
 
-                dict[key] = value!;
-                return true;
+                    dict[key] = CloneValue(value);
+                    return true;
+                }
             }
             
-            Console.WriteLine($"❌ Dictionary '{dictName}' not found");
+            LogWarning($"Dictionary '{dictName}' not found");
             return false;
         }
 
         private object? Get(string dictName, string key)
         {
+            if (string.IsNullOrWhiteSpace(dictName) || string.IsNullOrWhiteSpace(key))
+                return null;
+                
             if (!CheckRateLimit()) return null;
             if (!ValidateKey(key)) return null;
 
-            if (_dictionaries.TryGetValue(dictName, out var dict))
+            lock (_dictLock)
             {
-                return dict.TryGetValue(key, out var value) ? value : null;
+                if (_dictionaries.TryGetValue(dictName, out var dict))
+                {
+                    return dict.TryGetValue(key, out var value) ? value : null;
+                }
             }
             return null;
         }
 
         private bool Has(string dictName, string key)
         {
+            if (string.IsNullOrWhiteSpace(dictName) || string.IsNullOrWhiteSpace(key))
+                return false;
+                
             if (!CheckRateLimit()) return false;
             if (!ValidateKey(key)) return false;
 
-            return _dictionaries.TryGetValue(dictName, out var dict) && dict.ContainsKey(key);
+            lock (_dictLock)
+            {
+                return _dictionaries.TryGetValue(dictName, out var dict) && dict.ContainsKey(key);
+            }
         }
 
         private bool Remove(string dictName, string key)
         {
+            if (string.IsNullOrWhiteSpace(dictName) || string.IsNullOrWhiteSpace(key))
+                return false;
+                
             if (!CheckRateLimit()) return false;
             if (!ValidateKey(key)) return false;
 
-            if (_dictionaries.TryGetValue(dictName, out var dict))
+            lock (_dictLock)
             {
-                return dict.Remove(key);
+                if (_dictionaries.TryGetValue(dictName, out var dict))
+                {
+                    return dict.Remove(key);
+                }
             }
             return false;
         }
 
         private void Clear(string dictName)
         {
+            if (string.IsNullOrWhiteSpace(dictName))
+                return;
+                
             if (!CheckRateLimit()) return;
 
-            if (_dictionaries.TryGetValue(dictName, out var dict))
+            lock (_dictLock)
             {
-                dict.Clear();
-                Console.WriteLine($"🧹 Cleared dictionary: '{dictName}'");
+                if (_dictionaries.TryGetValue(dictName, out var dict))
+                {
+                    dict.Clear();
+                    LogInfo($"Cleared dictionary: '{dictName}'");
+                }
             }
+        }
+
+        private bool DeleteDictionary(string name)
+        {
+            if (string.IsNullOrWhiteSpace(name))
+                return false;
+                
+            lock (_dictLock)
+            {
+                if (_dictionaries.Remove(name))
+                {
+                    LogInfo($"Deleted dictionary: '{name}'");
+                    return true;
+                }
+            }
+            return false;
         }
 
         private string[] GetKeys(string dictName)
         {
+            if (string.IsNullOrWhiteSpace(dictName))
+                return Array.Empty<string>();
+                
             if (!CheckRateLimit()) return Array.Empty<string>();
 
-            if (_dictionaries.TryGetValue(dictName, out var dict))
+            lock (_dictLock)
             {
-                return dict.Keys.Take(100).ToArray(); // Limit preview
+                if (_dictionaries.TryGetValue(dictName, out var dict))
+                {
+                    return dict.Keys.Take(MaxDisplayItems).ToArray();
+                }
             }
             return Array.Empty<string>();
         }
 
         private object[] GetValues(string dictName)
         {
+            if (string.IsNullOrWhiteSpace(dictName))
+                return Array.Empty<object>();
+                
             if (!CheckRateLimit()) return Array.Empty<object>();
 
-            if (_dictionaries.TryGetValue(dictName, out var dict))
+            lock (_dictLock)
             {
-                return dict.Values.Take(100).ToArray(); // Limit preview
+                if (_dictionaries.TryGetValue(dictName, out var dict))
+                {
+                    return dict.Values.Take(MaxDisplayItems).ToArray();
+                }
             }
             return Array.Empty<object>();
         }
 
         private int GetCount(string dictName)
         {
+            if (string.IsNullOrWhiteSpace(dictName))
+                return 0;
+                
             if (!CheckRateLimit()) return 0;
 
-            return _dictionaries.TryGetValue(dictName, out var dict) ? dict.Count : 0;
+            lock (_dictLock)
+            {
+                return _dictionaries.TryGetValue(dictName, out var dict) ? dict.Count : 0;
+            }
         }
 
         private void PrintDictionary(string dictName)
         {
+            if (string.IsNullOrWhiteSpace(dictName))
+                return;
+                
             if (!CheckRateLimit()) return;
 
-            if (_dictionaries.TryGetValue(dictName, out var dict))
+            lock (_dictLock)
             {
-                Console.WriteLine($"\n📚 Dictionary: '{dictName}' ({dict.Count} items)");
-                Console.WriteLine("========================================");
-                
-                if (dict.Count == 0)
+                if (_dictionaries.TryGetValue(dictName, out var dict))
                 {
-                    Console.WriteLine("   (empty)");
+                    LogInfo($"Dictionary: '{dictName}' ({dict.Count} items)");
+                    Console.WriteLine("========================================");
+                    
+                    if (dict.Count == 0)
+                    {
+                        Console.WriteLine("   (empty)");
+                    }
+                    else
+                    {
+                        int count = 0;
+                        foreach (var kvp in dict)
+                        {
+                            if (count++ >= MaxDisplayItems)
+                            {
+                                Console.WriteLine($"   ... and {dict.Count - MaxDisplayItems} more items");
+                                break;
+                            }
+
+                            string valueStr = kvp.Value?.ToString() ?? "null";
+                            if (valueStr.Length > 50)
+                                valueStr = valueStr.Substring(0, 47) + "...";
+                            
+                            Console.WriteLine($"   🔑 {kvp.Key}: {valueStr}");
+                        }
+                    }
+                    Console.WriteLine();
                 }
                 else
                 {
-                    int count = 0;
-                    foreach (var kvp in dict)
-                    {
-                        if (count++ >= 20) // Limit display
-                        {
-                            Console.WriteLine($"   ... and {dict.Count - 20} more items");
-                            break;
-                        }
-
-                        string valueStr = kvp.Value?.ToString() ?? "null";
-                        if (valueStr.Length > 50)
-                            valueStr = valueStr.Substring(0, 47) + "...";
-                        
-                        Console.WriteLine($"   🔑 {kvp.Key}: {valueStr}");
-                    }
+                    LogWarning($"Dictionary '{dictName}' not found");
                 }
-                Console.WriteLine();
-            }
-            else
-            {
-                Console.WriteLine($"❌ Dictionary '{dictName}' not found");
             }
         }
 
         private bool DictionaryExists(string dictName)
         {
-            return _dictionaries.ContainsKey(dictName);
+            if (string.IsNullOrWhiteSpace(dictName))
+                return false;
+                
+            lock (_dictLock)
+            {
+                return _dictionaries.ContainsKey(dictName);
+            }
+        }
+        
+        public override void Dispose()
+        {
+            lock (_dictLock)
+            {
+                _dictionaries.Clear();
+            }
+            base.Dispose();
         }
     }
 }
