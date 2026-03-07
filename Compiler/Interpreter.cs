@@ -1,106 +1,391 @@
-using Fminusminus.Utils.Package;
+using System;
+using System.Collections.Generic;
+using Fminusminus.Errors;
 
-private void ExecuteStatement(StatementNode statement)
+namespace Fminusminus
 {
-    switch (statement)
+    public class Parser
     {
-        case PrintlnStatementNode println:
-            if (println.Expression is StringLiteralNode str)
-            {
-                if (str.IsInterpolated)
-                    Computer.PrintLn(str.Value, _variables);
-                else
-                    Computer.PrintLn(str.Value);
-            }
-            else if (println.Expression is VariableNode var)
-            {
-                var value = Computer.GetVariable(var.Name)?.ToString() ?? "";
-                Computer.PrintLn(value);
-            }
-            break;
-            
-        case PrintStatementNode print:
-            if (print.Expression is StringLiteralNode str)
-            {
-                Computer.Print(str.Value);
-            }
-            break;
-            
-        case ReturnStatementNode ret:
-            // Handled by caller
-            break;
-            
-        case AssignmentNode assign:
-            if (assign.Value is StringLiteralNode strVal)
-            {
-                Computer.SetVariable(assign.VariableName, strVal.Value);
-            }
-            else if (assign.Value is NumberLiteralNode numVal)
-            {
-                Computer.SetVariable(assign.VariableName, numVal.Value);
-            }
-            break;
-            
-        case ComputerCallNode computer:
-            ExecuteComputerCall(computer);
-            break;
-            
-        case AtBlockNode atBlock:
-            ExecuteAtBlock(atBlock);
-            break;
-    }
-}
+        private readonly List<Token> _tokens;
+        private int _current = 0;
+        private readonly List<SyntaxError> _errors = new();
 
-private void ExecuteComputerCall(ComputerCallNode computer)
-{
-    switch (computer.Method)
-    {
-        case "GetInfo":
-            var result = Computer.GetInfo();
-            Computer.PrintLn(result);
-            break;
+        public Parser(List<Token> tokens)
+        {
+            _tokens = tokens;
+        }
+
+        public ProgramNode Parse()
+        {
+            var program = new ProgramNode();
             
-        case "GetOSPath":
-            var path = Computer.GetOSPath();
-            Computer.SetVariable("OS_PATH", path);
-            break;
-            
-        case "CreateFile":
-            if (computer.Arguments.Count > 0 && 
-                computer.Arguments[0] is StringLiteralNode filename)
+            try
             {
-                string path = computer.Arguments.Count > 1 && 
-                             computer.Arguments[1] is StringLiteralNode pathNode 
-                             ? pathNode.Value : null;
-                ComputerIO.CreateFile(filename.Value, path);
+                SkipCommentsAndNewlines();
+
+                // Parse all import statements
+                while (Check(TokenType.IMPORT))
+                {
+                    if (!Match(TokenType.IMPORT))
+                        throw SyntaxError.MissingToken(Peek().Line, Peek().Column, "import");
+                    
+                    if (!Match(TokenType.IDENTIFIER))
+                        throw SyntaxError.MissingToken(Peek().Line, Peek().Column, "package name");
+                    
+                    string packageName = Previous().Lexeme;
+                    program.ImportedPackages.Add(packageName);
+                    
+                    SkipCommentsAndNewlines();
+                }
+                
+                if (!program.ImportedPackages.Contains("computer"))
+                    throw new SyntaxError("Program must import 'computer' package", 1, 1, "");
+                
+                SkipCommentsAndNewlines();
+                
+                if (!Match(TokenType.START))
+                    throw SyntaxError.MissingToken(Peek().Line, Peek().Column, "start");
+                
+                if (!Match(TokenType.LPAREN))
+                    throw SyntaxError.MissingToken(Previous().Line, Previous().Column + 5, "(");
+                
+                if (!Match(TokenType.RPAREN))
+                    throw SyntaxError.MissingToken(Previous().Line, Previous().Column + 1, ")");
+                
+                program.StartBlock = ParseStartBlock();
+                
+                SkipCommentsAndNewlines();
+                
+                if (Peek().Type != TokenType.EOF)
+                    throw SyntaxError.UnexpectedSymbol(Peek().Line, Peek().Column, Peek().Lexeme[0]);
             }
-            break;
-            
-        case "ListFiles":
-            string dir = computer.Arguments.Count > 0 && 
-                        computer.Arguments[0] is StringLiteralNode dirNode 
-                        ? dirNode.Value : ".";
-            ComputerIO.ListFiles(dir);
-            break;
-            
-        case "BeginWrite":
-            if (computer.Arguments.Count > 0 && 
-                computer.Arguments[0] is StringLiteralNode fileNode)
+            catch (SyntaxError ex)
             {
-                ComputerIO.BeginWrite(fileNode.Value);
+                _errors.Add(ex);
+                throw new AggregateException("Parser errors occurred", _errors);
             }
-            break;
             
-        case "WriteLine":
-            if (computer.Arguments.Count > 0 && 
-                computer.Arguments[0] is StringLiteralNode contentNode)
+            return program;
+        }
+
+        private StartBlockNode ParseStartBlock()
+        {
+            var block = new StartBlockNode();
+            
+            SkipCommentsAndNewlines();
+            
+            if (!Match(TokenType.LBRACE))
+                throw SyntaxError.MissingToken(Peek().Line, Peek().Column, "{");
+            
+            while (!Check(TokenType.RBRACE) && !IsAtEnd())
             {
-                ComputerIO.WriteLine(contentNode.Value);
+                var stmt = ParseStatement();
+                if (stmt != null)
+                    block.Statements.Add(stmt);
+                
+                SkipCommentsAndNewlines();
             }
-            break;
             
-        case "EndWrite":
-            ComputerIO.EndWrite();
-            break;
+            if (!Match(TokenType.RBRACE))
+                throw SyntaxError.MissingToken(Peek().Line, Peek().Column, "}");
+            
+            // Check for required return statement
+            bool hasReturn = false;
+            foreach (var stmt in block.Statements)
+            {
+                if (stmt is ReturnStatementNode)
+                {
+                    hasReturn = true;
+                    break;
+                }
+            }
+            
+            if (!hasReturn)
+                throw SyntaxError.MissingToken(Peek().Line, Peek().Column, "return()");
+            
+            block.HasReturn = hasReturn;
+            
+            return block;
+        }
+
+        private void SkipCommentsAndNewlines()
+        {
+            while (true)
+            {
+                if (Match(TokenType.NEWLINE))
+                    continue;
+                if (Match(TokenType.COMMENT))
+                    continue;
+                break;
+            }
+        }
+
+        private StatementNode? ParseStatement()
+        {
+            SkipCommentsAndNewlines();
+            
+            if (IsAtEnd()) return null;
+            
+            var token = Peek();
+            
+            try
+            {
+                switch (token.Type)
+                {
+                    case TokenType.PRINTLN:
+                        return ParsePrintln();
+                        
+                    case TokenType.PRINT:
+                        return ParsePrint();
+                        
+                    case TokenType.RETURN:
+                        return ParseReturn();
+                        
+                    case TokenType.IDENTIFIER:
+                        // Check if it's a package call (identifier.identifier)
+                        if (PeekNext().Type == TokenType.DOT)
+                        {
+                            return ParsePackageCall();
+                        }
+                        return ParseIdentifierStatement();
+                        
+                    case TokenType.AT:
+                        return ParseAtBlock();
+                        
+                    case TokenType.COMMENT:
+                        Advance();
+                        return null;
+                        
+                    default:
+                        throw SyntaxError.UnexpectedSymbol(token.Line, token.Column, token.Lexeme[0]);
+                }
+            }
+            catch (SyntaxError ex)
+            {
+                _errors.Add(ex);
+                while (!Check(TokenType.NEWLINE) && !IsAtEnd()) Advance();
+                return null;
+            }
+        }
+
+        private PrintlnStatementNode ParsePrintln()
+        {
+            Advance();
+            var node = new PrintlnStatementNode();
+            
+            if (!Match(TokenType.LPAREN))
+                throw SyntaxError.MissingToken(Previous().Line, Previous().Column + 6, "(");
+            
+            node.Expression = ParseExpression();
+            
+            if (!Match(TokenType.RPAREN))
+                throw SyntaxError.MissingToken(Previous().Line, Previous().Column + 1, ")");
+            
+            return node;
+        }
+
+        private PrintStatementNode ParsePrint()
+        {
+            Advance();
+            var node = new PrintStatementNode();
+            
+            if (!Match(TokenType.LPAREN))
+                throw SyntaxError.MissingToken(Previous().Line, Previous().Column + 5, "(");
+            
+            node.Expression = ParseExpression();
+            
+            if (!Match(TokenType.RPAREN))
+                throw SyntaxError.MissingToken(Previous().Line, Previous().Column + 1, ")");
+            
+            return node;
+        }
+
+        private ReturnStatementNode ParseReturn()
+        {
+            Advance();
+            var node = new ReturnStatementNode();
+            
+            if (!Match(TokenType.LPAREN))
+                throw SyntaxError.MissingToken(Previous().Line, Previous().Column + 6, "(");
+            
+            if (Check(TokenType.NUMBER))
+            {
+                node.ReturnCode = Convert.ToInt32(Peek().Literal);
+                Advance();
+            }
+            else
+            {
+                throw SyntaxError.MissingToken(Peek().Line, Peek().Column, "number");
+            }
+            
+            if (!Match(TokenType.RPAREN))
+                throw SyntaxError.MissingToken(Previous().Line, Previous().Column + 1, ")");
+            
+            return node;
+        }
+
+        private ComputerCallNode ParsePackageCall()
+        {
+            var node = new ComputerCallNode();
+            
+            // Package name
+            node.PackageName = Peek().Lexeme;
+            Advance();
+            
+            if (!Match(TokenType.DOT))
+                throw SyntaxError.MissingToken(Previous().Line, Previous().Column + node.PackageName.Length, ".");
+            
+            // Method name
+            if (Check(TokenType.IDENTIFIER))
+            {
+                node.MethodName = Peek().Lexeme;
+                Advance();
+            }
+            else
+            {
+                throw SyntaxError.MissingToken(Peek().Line, Peek().Column, "method name");
+            }
+            
+            // Arguments
+            if (Match(TokenType.LPAREN))
+            {
+                while (!Check(TokenType.RPAREN) && !IsAtEnd())
+                {
+                    node.Arguments.Add(ParseExpression()!);
+                    Match(TokenType.COMMA);
+                }
+                
+                if (!Match(TokenType.RPAREN))
+                    throw SyntaxError.MissingToken(Previous().Line, Previous().Column + 1, ")");
+            }
+            
+            return node;
+        }
+
+        private StatementNode? ParseIdentifierStatement()
+        {
+            string identifier = Peek().Lexeme;
+            int line = Peek().Line;
+            int col = Peek().Column;
+            Advance();
+            
+            if (Match(TokenType.ASSIGN))
+            {
+                var node = new AssignmentNode { VariableName = identifier };
+                node.Value = ParseExpression();
+                return node;
+            }
+            
+            throw SyntaxError.InvalidToken(line, col, identifier);
+        }
+
+        private AtBlockNode ParseAtBlock()
+        {
+            Advance();
+            var node = new AtBlockNode();
+            
+            node.FileName = ParseExpression();
+            
+            if (!(node.FileName is StringLiteralNode))
+                throw new SyntaxError("Filename must be a string", 
+                    node.FileName!.Line, node.FileName.Column, "");
+            
+            SkipCommentsAndNewlines();
+            
+            if (!Match(TokenType.LBRACE))
+                throw SyntaxError.MissingToken(Previous().Line, Previous().Column + 1, "{");
+            
+            while (!Check(TokenType.RBRACE) && !IsAtEnd())
+            {
+                var stmt = ParseStatement();
+                if (stmt != null)
+                    node.Statements.Add(stmt);
+                
+                SkipCommentsAndNewlines();
+            }
+            
+            if (!Match(TokenType.RBRACE))
+                throw SyntaxError.MissingToken(Peek().Line, Peek().Column, "}");
+            
+            return node;
+        }
+
+        private ExpressionNode? ParseExpression()
+        {
+            if (Check(TokenType.STRING))
+            {
+                var node = new StringLiteralNode { 
+                    Value = Peek().Literal?.ToString() ?? "",
+                    IsInterpolated = false
+                };
+                Advance();
+                return node;
+            }
+            
+            if (Check(TokenType.STRING_INTERPOLATED))
+            {
+                var node = new StringLiteralNode { 
+                    Value = Peek().Literal?.ToString() ?? "",
+                    IsInterpolated = true
+                };
+                Advance();
+                return node;
+            }
+            
+            if (Check(TokenType.NUMBER))
+            {
+                var node = new NumberLiteralNode { 
+                    Value = Convert.ToDouble(Peek().Literal ?? 0)
+                };
+                Advance();
+                return node;
+            }
+            
+            if (Check(TokenType.IDENTIFIER))
+            {
+                // Check for boolean literals
+                string lexeme = Peek().Lexeme;
+                if (lexeme == "true" || lexeme == "false")
+                {
+                    var node = new BooleanLiteralNode { Value = lexeme == "true" };
+                    Advance();
+                    return node;
+                }
+                
+                if (lexeme == "null")
+                {
+                    Advance();
+                    return new NullLiteralNode();
+                }
+                
+                var varNode = new VariableNode { Name = lexeme };
+                Advance();
+                return varNode;
+            }
+            
+            throw SyntaxError.MissingToken(Peek().Line, Peek().Column, "expression");
+        }
+
+        private bool Match(TokenType type)
+        {
+            if (Check(type))
+            {
+                Advance();
+                return true;
+            }
+            return false;
+        }
+
+        private bool Check(TokenType type) => !IsAtEnd() && Peek().Type == type;
+        private Token Peek() => _tokens[_current];
+        private Token PeekNext() => _current + 1 < _tokens.Count ? _tokens[_current + 1] : _tokens[^1];
+        private Token Previous() => _tokens[_current - 1];
+        private bool IsAtEnd() => Peek().Type == TokenType.EOF;
+        
+        private Token Advance()
+        {
+            if (!IsAtEnd()) _current++;
+            return Previous();
+        }
     }
 }
