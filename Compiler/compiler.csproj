@@ -11,7 +11,7 @@
     <AssemblyName>fminus</AssemblyName>
     <RootNamespace>Fminusminus</RootNamespace>
     
-    <!-- Version - Sửa theo semantic versioning -->
+    <!-- Version Sửa theo semantic versioning -->
     <Version>2.0.0.0-alpha1</Version>
     <FileVersion>2.0.0.0-alpha1</FileVersion>
     
@@ -39,7 +39,7 @@
 
   <!-- 
     ⭐ Include tất cả file .cs trong tất cả thư mục con 
-    Sử dụng wildcard ** - thoải mái thêm file không cần sửa csproj
+    Sử dụng wildcard ** thoải mái thêm file không cần sửa csproj
   -->
   <ItemGroup>
     <!-- Include tất cả file .cs trong thư mục gốc và các thư mục con -->
@@ -83,7 +83,7 @@
     <PackageOutputPath>./nupkg</PackageOutputPath>
   </PropertyGroup>
 
-  <!-- Runtime identifiers - chạy được trên mọi nền tảng -->
+  <!-- Runtime identifiers chạy được trên mọi nền tảng -->
   <PropertyGroup>
     <RuntimeIdentifiers>win-x64;linux-x64;osx-x64</RuntimeIdentifiers>
   </PropertyGroup>
