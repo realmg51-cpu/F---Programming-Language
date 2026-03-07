@@ -11,13 +11,12 @@ namespace Fminusminus
     public class Interpreter
     {
         private Dictionary<string, object> _variables = new();
-        private string _currentFile = null;
+        private string? _currentFile = null;  // 👈 THÊM ?
         private bool _inFileBlock = false;
         private List<string> _fileContent = new();
-        private SystemInfo _systemInfo = null;
+        private SystemInfo? _systemInfo = null;  // 👈 THÊM ?
         private readonly List<FileError> _fileErrors = new();
 
-        // Memory simulation
         private long _totalMemory = 1024;
         private long _usedMemory = 256;
         private long _memoryLeft => _totalMemory - _usedMemory;
@@ -31,7 +30,7 @@ namespace Fminusminus
             
             try
             {
-                foreach (var statement in program.StartBlock.Statements)
+                foreach (var statement in program.StartBlock!.Statements)  // 👈 THÊM !
                 {
                     ExecuteStatement(statement);
                 }
@@ -68,11 +67,9 @@ namespace Fminusminus
                     break;
                     
                 case ReturnStatementNode ret:
-                    // Handled by caller
                     break;
                     
                 case EndStatementNode end:
-                    // Just marks the end
                     break;
                     
                 case AssignmentNode assign:
@@ -102,7 +99,7 @@ namespace Fminusminus
 
         private void ExecutePrintln(PrintlnStatementNode println)
         {
-            string output = EvaluateExpression(println.Expression);
+            string output = EvaluateExpression(println.Expression!);  // 👈 THÊM !
             
             if (_inFileBlock && _currentFile != null)
             {
@@ -116,7 +113,7 @@ namespace Fminusminus
 
         private void ExecutePrint(PrintStatementNode print)
         {
-            string output = EvaluateExpression(print.Expression);
+            string output = EvaluateExpression(print.Expression!);  // 👈 THÊM !
             
             if (_inFileBlock && _currentFile != null)
             {
@@ -130,7 +127,7 @@ namespace Fminusminus
 
         private void ExecuteAssignment(AssignmentNode assign)
         {
-            string value = EvaluateExpression(assign.Value);
+            string value = EvaluateExpression(assign.Value!);  // 👈 THÊM !
             _variables[assign.VariableName] = value;
         }
 
@@ -138,9 +135,9 @@ namespace Fminusminus
         {
             if (computer.Property == "systeminfo" && computer.Operation == "get")
             {
-                _variables["systeminfo"] = _systemInfo;
+                _variables["systeminfo"] = _systemInfo!;  // 👈 THÊM !
                 Console.ForegroundColor = ConsoleColor.Cyan;
-                Console.WriteLine(_systemInfo.ToString());
+                Console.WriteLine(_systemInfo!.ToString());  // 👈 THÊM !
                 Console.ResetColor();
             }
         }
@@ -178,10 +175,8 @@ namespace Fminusminus
             
             string fileName = EvaluateExpression(io.Parameters[0]);
             
-            // Validate filename
             FileError.ValidateFilename(fileName);
             
-            // Xử lý path parameter nếu có
             string path = "";
             if (io.Parameters.Count > 1 && io.Parameters[1] is VariableNode pathVar && pathVar.Name == "path")
             {
@@ -189,7 +184,6 @@ namespace Fminusminus
                     path = EvaluateExpression(io.Parameters[2]);
             }
             
-            // Mặc định lưu ở thư mục hiện tại
             _currentFile = path == "" ? fileName : Path.Combine(path, fileName);
             if (!_currentFile.EndsWith(".txt"))
                 _currentFile += ".txt";
@@ -214,7 +208,6 @@ namespace Fminusminus
             if (_currentFile == null)
                 throw new Exception("No file to save. Use io.cfile first.");
             
-            // Xử lý path parameter nếu có
             string savePath = _currentFile;
             if (io.Parameters.Count > 0)
             {
@@ -231,7 +224,6 @@ namespace Fminusminus
             
             try
             {
-                // Validate save path
                 string directory = Path.GetDirectoryName(savePath);
                 if (!string.IsNullOrEmpty(directory) && !Directory.Exists(directory))
                 {
@@ -241,7 +233,6 @@ namespace Fminusminus
                 File.WriteAllLines(savePath, _fileContent);
                 Console.WriteLine($"File saved: {savePath}");
                 
-                // Clear file content after save
                 _fileContent.Clear();
             }
             catch (UnauthorizedAccessException)
@@ -262,7 +253,6 @@ namespace Fminusminus
         {
             string path = ".";
             
-            // Parse parameters
             if (io.Parameters.Count > 0)
             {
                 if (io.Parameters[0] is VariableNode var && var.Name == "path")
@@ -282,19 +272,15 @@ namespace Fminusminus
                 }
             }
             
-            // Validate path
             if (string.IsNullOrWhiteSpace(path))
                 throw FileError.NotFound(path);
             
-            // Check for invalid characters
             if (FileError.HasInvalidCharacters(path))
                 throw FileError.InvalidCharacters(path);
             
-            // Check if directory exists
             if (!Directory.Exists(path))
                 throw FileError.NotFound(path);
             
-            // Check access permission
             try
             {
                 Directory.GetFiles(path);
@@ -332,8 +318,8 @@ namespace Fminusminus
 
         private void ExecuteAtBlock(AtBlockNode atBlock)
         {
-            string fileName = EvaluateExpression(atBlock.FileName);
-            string previousFile = _currentFile;
+            string fileName = EvaluateExpression(atBlock.FileName!);  // 👈 THÊM !
+            string? previousFile = _currentFile;
             bool previousInBlock = _inFileBlock;
             var previousContent = _fileContent;
             
@@ -346,7 +332,6 @@ namespace Fminusminus
                 ExecuteStatement(statement);
             }
             
-            // Restore previous state
             _currentFile = previousFile;
             _inFileBlock = previousInBlock;
             _fileContent = previousContent;
@@ -373,7 +358,6 @@ namespace Fminusminus
                 Console.ResetColor();
             }
             
-            // Simulate memory usage
             if (memory.Property == "memoryused")
                 _usedMemory = Math.Min(_totalMemory, _usedMemory + 1);
         }
@@ -385,14 +369,14 @@ namespace Fminusminus
                 case StringLiteralNode str:
                     if (str.IsInterpolated)
                         return InterpolateString(str.Value);
-                    return str.Value;
+                    return str.Value ?? string.Empty;  // 👈 XỬ LÝ NULL
                     
                 case NumberLiteralNode num:
                     return num.Value.ToString();
                     
                 case VariableNode var:
-                    if (_variables.TryGetValue(var.Name, out object value))
-                        return value.ToString();
+                    if (_variables.TryGetValue(var.Name, out object? value))  // 👈 THÊM ?
+                        return value?.ToString() ?? "";  // 👈 XỬ LÝ NULL
                     throw new Exception($"Undefined variable: {var.Name}");
                     
                 default:
@@ -423,9 +407,9 @@ namespace Fminusminus
                     {
                         string varName = template.Substring(i + 1, j - i - 2).Trim();
                         
-                        if (_variables.TryGetValue(varName, out object value))
+                        if (_variables.TryGetValue(varName, out object? value))  // 👈 THÊM ?
                         {
-                            result.Append(value.ToString());
+                            result.Append(value?.ToString() ?? "");  // 👈 XỬ LÝ NULL
                         }
                         else if (varName == "systeminfo" && _systemInfo != null)
                         {
