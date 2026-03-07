@@ -1,18 +1,21 @@
 <Project Sdk="Microsoft.NET.Sdk">
 
   <PropertyGroup>
+    <!-- Cấu hình cơ bản -->
     <OutputType>Exe</OutputType>
     <TargetFramework>net8.0</TargetFramework>
     <ImplicitUsings>enable</ImplicitUsings>
     <Nullable>enable</Nullable>
     
+    <!-- Tên assembly và namespace -->
     <AssemblyName>fminus</AssemblyName>
     <RootNamespace>Fminusminus</RootNamespace>
     
-    <!-- ĐÃ SỬA: Thêm .0 cho revision -->
-    <Version>2.0.0.0-alpha0</Version>
-    <FileVersion>2.0.0.0-alpha0</FileVersion>
+    <!-- Version - Sửa theo semantic versioning -->
+    <Version>2.0.0.0-alpha1</Version>
+    <FileVersion>2.0.0.0-alpha1</FileVersion>
     
+    <!-- Thông tin package -->
     <Authors>Lập trình viên 13 tuổi (RealMG)</Authors>
     <Company>F-- Lang</Company>
     <Product>F-- Programming Language</Product>
@@ -20,16 +23,74 @@
     <Copyright>© 2026 RealMG</Copyright>
     <PackageLicenseExpression>MIT</PackageLicenseExpression>
     <RepositoryUrl>https://github.com/realmg51-cpu/F--Programming-Language</RepositoryUrl>
+    <RepositoryType>git</RepositoryType>
     <PackageTags>f--;fminus;programming-language;compiler;interpreter;alpha</PackageTags>
     <PackageId>Fminusminus</PackageId>
+    
+    <!-- Build settings -->
+    <AllowUnsafeBlocks>false</AllowUnsafeBlocks>
+    <CheckForOverflowUnderflow>true</CheckForOverflowUnderflow>
+    <TreatWarningsAsErrors>false</TreatWarningsAsErrors>
+    
+    <!-- Output paths -->
+    <BaseOutputPath>bin\</BaseOutputPath>
+    <BaseIntermediateOutputPath>obj\</BaseIntermediateOutputPath>
   </PropertyGroup>
 
+  <!-- 
+    ⭐ Include tất cả file .cs trong tất cả thư mục con 
+    Sử dụng wildcard ** - thoải mái thêm file không cần sửa csproj
+  -->
+  <ItemGroup>
+    <!-- Include tất cả file .cs trong thư mục gốc và các thư mục con -->
+    <Compile Include="**/*.cs" Exclude="**/obj/**/*.cs;**/bin/**/*.cs" />
+    
+    <!-- Resources -->
+    <EmbeddedResource Include="Resources/**/*" />
+    <None Include="..\examples\**\*.f--" CopyToOutputDirectory="PreserveNewest" />
+    <None Include="..\README.md" CopyToOutputDirectory="Always" />
+    <None Include="..\LICENSE" CopyToOutputDirectory="Always" />
+  </ItemGroup>
+
+  <!-- Conditional compilation cho các nền tảng khác nhau -->
+  <PropertyGroup Condition="'$(OS)' == 'Windows_NT'">
+    <DefineConstants>WINDOWS</DefineConstants>
+  </PropertyGroup>
+  
+  <PropertyGroup Condition="'$(OS)' != 'Windows_NT'">
+    <DefineConstants>LINUX</DefineConstants>
+  </PropertyGroup>
+
+  <!-- Debug vs Release -->
+  <PropertyGroup Condition="'$(Configuration)' == 'Debug'">
+    <DebugType>full</DebugType>
+    <DebugSymbols>true</DebugSymbols>
+    <Optimize>false</Optimize>
+    <DefineConstants>DEBUG;TRACE</DefineConstants>
+  </PropertyGroup>
+  
+  <PropertyGroup Condition="'$(Configuration)' == 'Release'">
+    <DebugType>pdbonly</DebugType>
+    <Optimize>true</Optimize>
+    <DefineConstants>TRACE</DefineConstants>
+    <DebugSymbols>false</DebugSymbols>
+  </PropertyGroup>
+
+  <!-- Cấu hình cho Global Tool -->
   <PropertyGroup>
     <PackAsTool>true</PackAsTool>
     <ToolCommandName>fminus</ToolCommandName>
     <PackageOutputPath>./nupkg</PackageOutputPath>
   </PropertyGroup>
 
+  <!-- Runtime identifiers - chạy được trên mọi nền tảng -->
+  <PropertyGroup>
+    <RuntimeIdentifiers>win-x64;linux-x64;osx-x64</RuntimeIdentifiers>
+  </PropertyGroup>
+
+  <!-- 
+    ⭐ Copy examples vào output để dễ test 
+  -->
   <Target Name="CopyExamples" AfterTargets="Build">
     <ItemGroup>
       <_ExampleFiles Include="..\examples\**\*.f--" />
@@ -38,5 +99,49 @@
           DestinationFolder="$(OutputPath)\examples\" 
           SkipUnchangedFiles="true" />
   </Target>
+
+  <!-- 
+    ⭐ Tạo file .rsp để chạy với nhiều tham số 
+  -->
+  <Target Name="GenerateRspFile" AfterTargets="Build">
+    <WriteLinesToFile 
+      File="$(OutputPath)fminus.rsp"
+      Lines="@(FminusCommandLine)"
+      Overwrite="true" />
+  </Target>
+
+  <!-- 
+    ⭐ Custom build events - hiển thị message khi build 
+  -->
+  <Target Name="FMinusMessage" BeforeTargets="Build">
+    <Message Text="╔═══════════════════════════════════════╗" Importance="high" />
+    <Message Text="║   🔥 BUILDING F-- COMPILER v2.0 🔥   ║" Importance="high" />
+    <Message Text="║     The backward step of humanity     ║" Importance="high" />
+    <Message Text="╚═══════════════════════════════════════╝" Importance="high" />
+  </Target>
+
+  <Target Name="FMinusComplete" AfterTargets="Build">
+    <Message Text="✅ Build thành công! Chạy thử với: dotnet run -- run examples/hello.f--" Importance="high" />
+  </Target>
+
+  <!-- 
+    ⭐ Package references - nếu cần thêm thư viện bên ngoài 
+  -->
+  <ItemGroup>
+    <!-- Không có dependencies bên ngoài - F-- tự chủ! -->
+  </ItemGroup>
+
+  <!-- 
+    ⭐ SourceLink cho debugging 
+  -->
+  <PropertyGroup>
+    <PublishRepositoryUrl>true</PublishRepositoryUrl>
+    <EmbedUntrackedSources>true</EmbedUntrackedSources>
+    <IncludeSourceRevisionInInformationalVersion>true</IncludeSourceRevisionInInformationalVersion>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <PackageReference Include="Microsoft.SourceLink.GitHub" Version="8.0.0" PrivateAssets="All" Condition="'$(Configuration)' == 'Release'" />
+  </ItemGroup>
 
 </Project>
