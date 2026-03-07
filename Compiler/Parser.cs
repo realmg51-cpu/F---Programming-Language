@@ -21,7 +21,6 @@ namespace Fminusminus
             
             try
             {
-                // Bắt buộc phải có: import computer
                 if (!Match(TokenType.IMPORT))
                     throw SyntaxError.MissingToken(Peek().Line, Peek().Column, "import");
                 
@@ -30,10 +29,8 @@ namespace Fminusminus
                 
                 program.HasImportComputer = true;
                 
-                // Có thể có newline sau import
                 while (Match(TokenType.NEWLINE)) { }
                 
-                // Bắt buộc phải có: start()
                 if (!Match(TokenType.START))
                     throw SyntaxError.MissingToken(Peek().Line, Peek().Column, "start");
                 
@@ -43,10 +40,8 @@ namespace Fminusminus
                 if (!Match(TokenType.RPAREN))
                     throw SyntaxError.MissingToken(Previous().Line, Previous().Column + 1, ")");
                 
-                // Parse start block
                 program.StartBlock = ParseStartBlock();
                 
-                // Kiểm tra còn token thừa
                 if (Peek().Type != TokenType.EOF)
                     throw SyntaxError.UnexpectedSymbol(Peek().Line, Peek().Column, Peek().Lexeme[0]);
             }
@@ -66,21 +61,18 @@ namespace Fminusminus
             if (!Match(TokenType.LBRACE))
                 throw SyntaxError.MissingToken(Peek().Line, Peek().Column, "{");
             
-            // Parse statements inside block
             while (!Check(TokenType.RBRACE) && !IsAtEnd())
             {
                 var stmt = ParseStatement();
                 if (stmt != null)
                     block.Statements.Add(stmt);
                 
-                // Skip optional newlines
                 while (Match(TokenType.NEWLINE)) { }
             }
             
             if (!Match(TokenType.RBRACE))
                 throw SyntaxError.MissingToken(Peek().Line, Peek().Column, "}");
             
-            // Kiểm tra bắt buộc phải có return và end
             bool hasReturn = false;
             bool hasEnd = false;
             int returnIndex = -1;
@@ -106,7 +98,6 @@ namespace Fminusminus
             if (!hasEnd)
                 throw SyntaxError.MissingToken(Peek().Line, Peek().Column, "end()");
             
-            // Kiểm tra return phải trước end
             if (returnIndex > endIndex)
                 throw new SyntaxError("return() must be before end()", 
                     block.Statements[endIndex].Line, block.Statements[endIndex].Column, "");
@@ -117,9 +108,8 @@ namespace Fminusminus
             return block;
         }
 
-        private StatementNode ParseStatement()
+        private StatementNode? ParseStatement()  // 👈 THÊM ?
         {
-            // Skip newlines
             while (Match(TokenType.NEWLINE)) { }
             
             if (IsAtEnd()) return null;
@@ -168,7 +158,6 @@ namespace Fminusminus
             catch (SyntaxError ex)
             {
                 _errors.Add(ex);
-                // Recovery - skip to next newline
                 while (!Check(TokenType.NEWLINE) && !IsAtEnd()) Advance();
                 return null;
             }
@@ -244,7 +233,7 @@ namespace Fminusminus
             return node;
         }
 
-        private StatementNode ParseIdentifierStatement()
+        private StatementNode? ParseIdentifierStatement()  // 👈 THÊM ?
         {
             string identifier = Peek().Lexeme;
             int line = Peek().Line;
@@ -270,7 +259,7 @@ namespace Fminusminus
             
             if (!(node.FileName is StringLiteralNode))
                 throw new SyntaxError("Filename must be a string", 
-                    node.FileName.Line, node.FileName.Column, "");
+                    node.FileName!.Line, node.FileName.Column, "");  // 👈 THÊM !
             
             if (!Match(TokenType.LBRACE))
                 throw SyntaxError.MissingToken(Previous().Line, Previous().Column + 1, "{");
@@ -306,12 +295,11 @@ namespace Fminusminus
                 throw SyntaxError.MissingToken(Peek().Line, Peek().Column, "operation");
             }
             
-            // Parse parameters if any
             if (Match(TokenType.LPAREN))
             {
                 while (!Check(TokenType.RPAREN) && !IsAtEnd())
                 {
-                    node.Parameters.Add(ParseExpression());
+                    node.Parameters.Add(ParseExpression()!);  // 👈 THÊM !
                     Match(TokenType.COMMA);
                 }
                 
@@ -395,12 +383,12 @@ namespace Fminusminus
             return node;
         }
 
-        private ExpressionNode ParseExpression()
+        private ExpressionNode? ParseExpression()  // 👈 THÊM ?
         {
             if (Check(TokenType.STRING))
             {
                 var node = new StringLiteralNode { 
-                    Value = Peek().Literal.ToString(),
+                    Value = Peek().Literal?.ToString() ?? "",  // 👈 XỬ LÝ NULL
                     IsInterpolated = false
                 };
                 Advance();
@@ -410,7 +398,7 @@ namespace Fminusminus
             if (Check(TokenType.STRING_INTERPOLATED))
             {
                 var node = new StringLiteralNode { 
-                    Value = Peek().Literal.ToString(),
+                    Value = Peek().Literal?.ToString() ?? "",  // 👈 XỬ LÝ NULL
                     IsInterpolated = true
                 };
                 Advance();
@@ -420,7 +408,7 @@ namespace Fminusminus
             if (Check(TokenType.NUMBER))
             {
                 var node = new NumberLiteralNode { 
-                    Value = Convert.ToDouble(Peek().Literal)
+                    Value = Convert.ToDouble(Peek().Literal ?? 0)  // 👈 XỬ LÝ NULL
                 };
                 Advance();
                 return node;
