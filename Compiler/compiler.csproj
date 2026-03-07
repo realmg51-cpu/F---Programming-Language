@@ -7,13 +7,19 @@
     <ImplicitUsings>enable</ImplicitUsings>
     <Nullable>enable</Nullable>
     
+    <!-- 🟢 FIX 1: Tắt implicit includes để tránh duplicate items -->
+    <EnableDefaultCompileItems>false</EnableDefaultCompileItems>
+    <EnableDefaultEmbeddedResourceItems>false</EnableDefaultEmbeddedResourceItems>
+    <EnableDefaultNoneItems>false</EnableDefaultNoneItems>
+    
     <!-- Tên assembly và namespace -->
     <AssemblyName>fminus</AssemblyName>
     <RootNamespace>Fminusminus</RootNamespace>
     
-    <!-- Version Sửa theo semantic versioning -->
-    <Version>2.0.0.0-alpha1</Version>
-    <FileVersion>2.0.0.0-alpha1</FileVersion>
+    <!-- 🟢 FIX 2: Version đúng format -->
+    <Version>2.0.0-alpha1</Version>
+    <FileVersion>2.0.0.0</FileVersion>
+    <InformationalVersion>2.0.0-alpha1</InformationalVersion>
     
     <!-- Thông tin package -->
     <Authors>Lập trình viên 13 tuổi (RealMG)</Authors>
@@ -32,9 +38,9 @@
     <CheckForOverflowUnderflow>true</CheckForOverflowUnderflow>
     <TreatWarningsAsErrors>false</TreatWarningsAsErrors>
     
-    <!-- Output paths -->
-    <BaseOutputPath>bin\</BaseOutputPath>
-    <BaseIntermediateOutputPath>obj\</BaseIntermediateOutputPath>
+    <!-- 🟢 FIX 3: Output paths không có trailing slash -->
+    <BaseOutputPath>bin</BaseOutputPath>
+    <BaseIntermediateOutputPath>obj</BaseIntermediateOutputPath>
   </PropertyGroup>
 
   <!-- 
@@ -90,19 +96,29 @@
 
   <!-- 
     ⭐ Copy examples vào output để dễ test 
+    🟢 FIX 4: Thêm kiểm tra file tồn tại
   -->
-  <Target Name="CopyExamples" AfterTargets="Build">
+  <Target Name="CopyExamples" AfterTargets="Build" Condition="Exists('..\examples')">
     <ItemGroup>
       <_ExampleFiles Include="..\examples\**\*.f--" />
     </ItemGroup>
     <Copy SourceFiles="@(_ExampleFiles)" 
           DestinationFolder="$(OutputPath)\examples\" 
-          SkipUnchangedFiles="true" />
+          SkipUnchangedFiles="true"
+          Condition="'@(_ExampleFiles)' != ''" />
   </Target>
 
   <!-- 
     ⭐ Tạo file .rsp để chạy với nhiều tham số 
+    🟢 FIX 5: Thêm định nghĩa cho FminusCommandLine
   -->
+  <ItemGroup>
+    <FminusCommandLine Include="--help" />
+    <FminusCommandLine Include="--version" />
+    <FminusCommandLine Include="run examples/hello.f--" />
+    <FminusCommandLine Include="build examples/hello.f--" />
+  </ItemGroup>
+
   <Target Name="GenerateRspFile" AfterTargets="Build">
     <WriteLinesToFile 
       File="$(OutputPath)fminus.rsp"
@@ -133,6 +149,7 @@
 
   <!-- 
     ⭐ SourceLink cho debugging 
+    🟢 FIX 6: Sửa version đúng và đặt trong ItemGroup riêng với Condition
   -->
   <PropertyGroup>
     <PublishRepositoryUrl>true</PublishRepositoryUrl>
@@ -140,8 +157,17 @@
     <IncludeSourceRevisionInInformationalVersion>true</IncludeSourceRevisionInInformationalVersion>
   </PropertyGroup>
 
-  <ItemGroup>
-    <PackageReference Include="Microsoft.SourceLink.GitHub" Version="8.0.0" PrivateAssets="All" Condition="'$(Configuration)' == 'Release'" />
+  <ItemGroup Condition="'$(Configuration)' == 'Release'">
+    <!-- 🟢 FIX: Dùng version 1.1.1 thay vì 8.0.0 -->
+    <PackageReference Include="Microsoft.SourceLink.GitHub" Version="1.1.1" PrivateAssets="All" />
   </ItemGroup>
+
+  <!-- 
+    ⭐ Clean target để dọn dẹp sạch sẽ
+  -->
+  <Target Name="FMinusClean" AfterTargets="Clean">
+    <RemoveDir Directories="$(OutputPath)examples" Condition="Exists('$(OutputPath)examples')" />
+    <Delete Files="$(OutputPath)fminus.rsp" Condition="Exists('$(OutputPath)fminus.rsp')" />
+  </Target>
 
 </Project>
