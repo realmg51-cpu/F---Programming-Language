@@ -21,6 +21,9 @@ namespace Fminusminus
             
             try
             {
+                // Skip leading comments and newlines
+                SkipCommentsAndNewlines();
+
                 if (!Match(TokenType.IMPORT))
                     throw SyntaxError.MissingToken(Peek().Line, Peek().Column, "import");
                 
@@ -29,7 +32,7 @@ namespace Fminusminus
                 
                 program.HasImportComputer = true;
                 
-                while (Match(TokenType.NEWLINE)) { }
+                SkipCommentsAndNewlines();
                 
                 if (!Match(TokenType.START))
                     throw SyntaxError.MissingToken(Peek().Line, Peek().Column, "start");
@@ -41,6 +44,8 @@ namespace Fminusminus
                     throw SyntaxError.MissingToken(Previous().Line, Previous().Column + 1, ")");
                 
                 program.StartBlock = ParseStartBlock();
+                
+                SkipCommentsAndNewlines();
                 
                 if (Peek().Type != TokenType.EOF)
                     throw SyntaxError.UnexpectedSymbol(Peek().Line, Peek().Column, Peek().Lexeme[0]);
@@ -58,6 +63,8 @@ namespace Fminusminus
         {
             var block = new StartBlockNode();
             
+            SkipCommentsAndNewlines();
+            
             if (!Match(TokenType.LBRACE))
                 throw SyntaxError.MissingToken(Peek().Line, Peek().Column, "{");
             
@@ -67,7 +74,7 @@ namespace Fminusminus
                 if (stmt != null)
                     block.Statements.Add(stmt);
                 
-                while (Match(TokenType.NEWLINE)) { }
+                SkipCommentsAndNewlines();
             }
             
             if (!Match(TokenType.RBRACE))
@@ -108,9 +115,24 @@ namespace Fminusminus
             return block;
         }
 
-        private StatementNode? ParseStatement()  // 👈 THÊM ?
+        /// <summary>
+        /// Helper method to skip comments and newlines
+        /// </summary>
+        private void SkipCommentsAndNewlines()
         {
-            while (Match(TokenType.NEWLINE)) { }
+            while (true)
+            {
+                if (Match(TokenType.NEWLINE))
+                    continue;
+                if (Match(TokenType.COMMENT))
+                    continue;
+                break;
+            }
+        }
+
+        private StatementNode? ParseStatement()
+        {
+            SkipCommentsAndNewlines();
             
             if (IsAtEnd()) return null;
             
@@ -148,7 +170,7 @@ namespace Fminusminus
                         return ParseMemoryStatement();
                         
                     case TokenType.COMMENT:
-                        Advance();
+                        Advance(); // Skip comment
                         return null;
                         
                     default:
@@ -233,7 +255,7 @@ namespace Fminusminus
             return node;
         }
 
-        private StatementNode? ParseIdentifierStatement()  // 👈 THÊM ?
+        private StatementNode? ParseIdentifierStatement()
         {
             string identifier = Peek().Lexeme;
             int line = Peek().Line;
@@ -259,7 +281,9 @@ namespace Fminusminus
             
             if (!(node.FileName is StringLiteralNode))
                 throw new SyntaxError("Filename must be a string", 
-                    node.FileName!.Line, node.FileName.Column, "");  // 👈 THÊM !
+                    node.FileName!.Line, node.FileName.Column, "");
+            
+            SkipCommentsAndNewlines();
             
             if (!Match(TokenType.LBRACE))
                 throw SyntaxError.MissingToken(Previous().Line, Previous().Column + 1, "{");
@@ -269,6 +293,8 @@ namespace Fminusminus
                 var stmt = ParseStatement();
                 if (stmt != null)
                     node.Statements.Add(stmt);
+                
+                SkipCommentsAndNewlines();
             }
             
             if (!Match(TokenType.RBRACE))
@@ -299,7 +325,7 @@ namespace Fminusminus
             {
                 while (!Check(TokenType.RPAREN) && !IsAtEnd())
                 {
-                    node.Parameters.Add(ParseExpression()!);  // 👈 THÊM !
+                    node.Parameters.Add(ParseExpression()!);
                     Match(TokenType.COMMA);
                 }
                 
@@ -383,12 +409,12 @@ namespace Fminusminus
             return node;
         }
 
-        private ExpressionNode? ParseExpression()  // 👈 THÊM ?
+        private ExpressionNode? ParseExpression()
         {
             if (Check(TokenType.STRING))
             {
                 var node = new StringLiteralNode { 
-                    Value = Peek().Literal?.ToString() ?? "",  // 👈 XỬ LÝ NULL
+                    Value = Peek().Literal?.ToString() ?? "",
                     IsInterpolated = false
                 };
                 Advance();
@@ -398,7 +424,7 @@ namespace Fminusminus
             if (Check(TokenType.STRING_INTERPOLATED))
             {
                 var node = new StringLiteralNode { 
-                    Value = Peek().Literal?.ToString() ?? "",  // 👈 XỬ LÝ NULL
+                    Value = Peek().Literal?.ToString() ?? "",
                     IsInterpolated = true
                 };
                 Advance();
@@ -408,7 +434,7 @@ namespace Fminusminus
             if (Check(TokenType.NUMBER))
             {
                 var node = new NumberLiteralNode { 
-                    Value = Convert.ToDouble(Peek().Literal ?? 0)  // 👈 XỬ LÝ NULL
+                    Value = Convert.ToDouble(Peek().Literal ?? 0)
                 };
                 Advance();
                 return node;
