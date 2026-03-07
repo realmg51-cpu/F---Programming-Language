@@ -3,9 +3,6 @@ using System.Collections.Generic;
 
 namespace Fminusminus
 {
-    /// <summary>
-    /// Base class for all AST nodes
-    /// </summary>
     public abstract class AstNode
     {
         public int Line { get; set; }
@@ -17,13 +14,10 @@ namespace Fminusminus
         }
     }
 
-    /// <summary>
-    /// Program node - root of AST
-    /// </summary>
     public class ProgramNode : AstNode
     {
         public bool HasImportComputer { get; set; }
-        public StartBlockNode? StartBlock { get; set; }  // 👈 THÊM ?
+        public StartBlockNode? StartBlock { get; set; }
         
         public override void Print(int indent = 0)
         {
@@ -34,14 +28,10 @@ namespace Fminusminus
         }
     }
 
-    /// <summary>
-    /// Start block: start() { ... }
-    /// </summary>
     public class StartBlockNode : AstNode
     {
         public List<StatementNode> Statements { get; set; } = new();
         public bool HasReturn { get; set; }
-        public bool HasEnd { get; set; }
         
         public override void Print(int indent = 0)
         {
@@ -51,17 +41,11 @@ namespace Fminusminus
         }
     }
 
-    /// <summary>
-    /// Base class for statements
-    /// </summary>
     public abstract class StatementNode : AstNode { }
 
-    /// <summary>
-    /// Print with newline
-    /// </summary>
     public class PrintlnStatementNode : StatementNode
     {
-        public ExpressionNode? Expression { get; set; }  // 👈 THÊM ?
+        public ExpressionNode? Expression { get; set; }
         
         public override void Print(int indent = 0)
         {
@@ -70,12 +54,9 @@ namespace Fminusminus
         }
     }
 
-    /// <summary>
-    /// Print without newline
-    /// </summary>
     public class PrintStatementNode : StatementNode
     {
-        public ExpressionNode? Expression { get; set; }  // 👈 THÊM ?
+        public ExpressionNode? Expression { get; set; }
         
         public override void Print(int indent = 0)
         {
@@ -84,9 +65,6 @@ namespace Fminusminus
         }
     }
 
-    /// <summary>
-    /// Return statement
-    /// </summary>
     public class ReturnStatementNode : StatementNode
     {
         public int ReturnCode { get; set; }
@@ -97,24 +75,12 @@ namespace Fminusminus
         }
     }
 
-    /// <summary>
-    /// End statement
-    /// </summary>
-    public class EndStatementNode : StatementNode
-    {
-        public override void Print(int indent = 0)
-        {
-            Console.WriteLine($"{new string(' ', indent)}END");
-        }
-    }
+    // 👇 ĐÃ XÓA EndStatementNode
 
-    /// <summary>
-    /// Assignment: variable = value
-    /// </summary>
     public class AssignmentNode : StatementNode
     {
-        public string VariableName { get; set; } = string.Empty;  // 👈 GÁN GIÁ TRỊ MẶC ĐỊNH
-        public ExpressionNode? Value { get; set; }  // 👈 THÊM ?
+        public string VariableName { get; set; } = string.Empty;
+        public ExpressionNode? Value { get; set; }
         
         public override void Print(int indent = 0)
         {
@@ -123,45 +89,22 @@ namespace Fminusminus
         }
     }
 
-    /// <summary>
-    /// IO operations
-    /// </summary>
-    public class IOStatementNode : StatementNode
+    public class ComputerCallNode : StatementNode
     {
-        public string Operation { get; set; } = string.Empty;  // 👈 GÁN GIÁ TRỊ MẶC ĐỊNH
-        public List<ExpressionNode> Parameters { get; set; } = new();
+        public string Method { get; set; } = string.Empty;
+        public List<ExpressionNode> Arguments { get; set; } = new();
         
         public override void Print(int indent = 0)
         {
-            Console.WriteLine($"{new string(' ', indent)}IO.{Operation}");
-            foreach (var param in Parameters)
-                param.Print(indent + 2);
+            Console.WriteLine($"{new string(' ', indent)}COMPUTER.{Method}()");
+            foreach (var arg in Arguments)
+                arg.Print(indent + 2);
         }
     }
 
-    /// <summary>
-    /// Computer system info
-    /// </summary>
-    public class ComputerStatementNode : StatementNode
-    {
-        public string Property { get; set; } = string.Empty;  // 👈 GÁN GIÁ TRỊ MẶC ĐỊNH
-        public string Operation { get; set; } = string.Empty;  // 👈 GÁN GIÁ TRỊ MẶC ĐỊNH
-        public List<ExpressionNode> Parameters { get; set; } = new();
-        
-        public override void Print(int indent = 0)
-        {
-            Console.WriteLine($"{new string(' ', indent)}COMPUTER.{Property}({Operation})");
-            foreach (var param in Parameters)
-                param.Print(indent + 2);
-        }
-    }
-
-    /// <summary>
-    /// At block: at "file.txt" { ... }
-    /// </summary>
     public class AtBlockNode : StatementNode
     {
-        public ExpressionNode? FileName { get; set; }  // 👈 THÊM ?
+        public ExpressionNode? FileName { get; set; }
         public List<StatementNode> Statements { get; set; } = new();
         
         public override void Print(int indent = 0)
@@ -174,30 +117,11 @@ namespace Fminusminus
         }
     }
 
-    /// <summary>
-    /// Memory access
-    /// </summary>
-    public class MemoryStatementNode : StatementNode
-    {
-        public string Property { get; set; } = string.Empty;  // 👈 GÁN GIÁ TRỊ MẶC ĐỊNH
-        
-        public override void Print(int indent = 0)
-        {
-            Console.WriteLine($"{new string(' ', indent)}MEMORY.{Property}");
-        }
-    }
-
-    /// <summary>
-    /// Base class for expressions
-    /// </summary>
     public abstract class ExpressionNode : AstNode { }
 
-    /// <summary>
-    /// String literal
-    /// </summary>
     public class StringLiteralNode : ExpressionNode
     {
-        public string Value { get; set; } = string.Empty;  // 👈 GÁN GIÁ TRỊ MẶC ĐỊNH
+        public string Value { get; set; } = string.Empty;
         public bool IsInterpolated { get; set; }
         
         public override void Print(int indent = 0)
@@ -206,9 +130,6 @@ namespace Fminusminus
         }
     }
 
-    /// <summary>
-    /// Number literal
-    /// </summary>
     public class NumberLiteralNode : ExpressionNode
     {
         public double Value { get; set; }
@@ -219,12 +140,9 @@ namespace Fminusminus
         }
     }
 
-    /// <summary>
-    /// Variable reference
-    /// </summary>
     public class VariableNode : ExpressionNode
     {
-        public string Name { get; set; } = string.Empty;  // 👈 GÁN GIÁ TRỊ MẶC ĐỊNH
+        public string Name { get; set; } = string.Empty;
         
         public override void Print(int indent = 0)
         {
