@@ -165,6 +165,7 @@ namespace Fminusminus
             return 0;
         }
 
+        // ✅ CHỈ CÓ MỘT METHOD GenerateCode DUY NHẤT NÀY
         static int GenerateCode(string filename, string target, string optLevel)
         {
             if (!File.Exists(filename))
