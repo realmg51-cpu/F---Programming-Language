@@ -1,0 +1,25 @@
+import computer
+start()
+{
+    println("=== F-- File I/O Demo ===")
+    println()
+    
+    # Create a new file
+    println("📁 Creating file...")
+    io.cfile("hello"(path "txt"))
+    
+    // Write to file
+    at "hello.txt"
+    {
+        io.println("Hello from F--!")
+        io.println("This file was created using F--")
+        io.println($"Date: 2026")
+    }
+    
+    // Save file
+    io.save()
+    println("✅ File saved: hello.txt")
+    
+    return(0)
+    end()
+}
