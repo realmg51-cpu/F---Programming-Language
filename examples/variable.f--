@@ -1,0 +1,22 @@
+import computer
+start()
+{
+    // String variables
+    name = "F--"
+    language = "Programming Language"
+    
+    // Number variables
+    version = 2.0
+    year = 2026
+    
+    // Print with interpolation
+    println($"Welcome to {name} {language}!")
+    println($"Version: {version}")
+    println($"Year: {year}")
+    
+    // Multiple variables in one string
+    println($"This is {name} v{version} released in {year}")
+    
+    return(0)
+    end()
+}
