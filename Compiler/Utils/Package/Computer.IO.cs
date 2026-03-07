@@ -1,6 +1,7 @@
 using System;
 using System.Collections.Generic;
 using System.IO;
+using System.Linq;
 using Fminusminus.Errors;
 using Fminusminus.Utils.Security;
 
@@ -9,7 +10,7 @@ namespace Fminusminus.Utils.Package
     /// <summary>
     /// IO package - file operations with security
     /// </summary>
-    public class IOPackage : BasePackage
+    public class IOPackage : BasePackage, IDisposable
     {
         public override string Name => "io";
         public override string Version => "1.0.0";
@@ -18,12 +19,29 @@ namespace Fminusminus.Utils.Package
         private string? _currentFile;
         private List<string> _fileContent = new();
         private bool _inFileBlock;
-        private int _fileOperationCount;
+        
+        // Thread safety
+        private readonly object _fileLock = new object();
+        
+        // Rate limiting
+        private readonly object _rateLock = new object();
+        private DateTime _rateLimitReset = DateTime.UtcNow.AddHours(1);
+        private int _fileOperationCount = 0;
         private const int MaxFileOperations = 1000;
+        
+        // Log file path
+        private readonly string _logPath;
+
+        public IOPackage()
+        {
+            _logPath = Path.Combine(Environment.CurrentDirectory, "fminus-io.log");
+        }
 
         public override void Initialize()
         {
-            _methods["CreateFile"] = args =>
+            base.Initialize();
+            
+            RegisterMethod("CreateFile", args =>
             {
                 if (args.Length > 0 && args[0] is string filename)
                 {
@@ -31,226 +49,378 @@ namespace Fminusminus.Utils.Package
                     return CreateFile(filename, path);
                 }
                 return null;
-            };
+            }, 1, 2, "Create a new file");
             
-            _methods["BeginWrite"] = args =>
+            RegisterMethod("BeginWrite", args =>
             {
                 if (args.Length > 0 && args[0] is string filename)
                 {
                     BeginWrite(filename);
                 }
                 return null;
-            };
+            }, 1, 1, "Begin writing to a file");
             
-            _methods["WriteLine"] = args =>
+            RegisterMethod("WriteLine", args =>
             {
                 if (args.Length > 0 && args[0] != null)
                 {
                     WriteLine(args[0].ToString() ?? "");
                 }
                 return null;
-            };
+            }, 1, 1, "Write a line to the current file");
             
-            _methods["Write"] = args =>
+            RegisterMethod("Write", args =>
             {
                 if (args.Length > 0 && args[0] != null)
                 {
                     Write(args[0].ToString() ?? "");
                 }
                 return null;
-            };
+            }, 1, 1, "Write to current line");
             
-            _methods["EndWrite"] = args =>
+            RegisterMethod("EndWrite", args =>
             {
                 EndWrite();
                 return null;
-            };
+            }, 0, 0, "End writing and save file");
             
-            _methods["ListFiles"] = args =>
+            RegisterMethod("ListFiles", args =>
             {
                 string path = args.Length > 0 && args[0] is string p ? p : ".";
                 ListFiles(path);
                 return null;
-            };
+            }, 0, 1, "List files in directory");
             
-            _methods["FileExists"] = args =>
+            RegisterMethod("FileExists", args =>
             {
                 if (args.Length > 0 && args[0] is string filename)
                 {
                     return FileExists(filename);
                 }
                 return false;
-            };
+            }, 1, 1, "Check if file exists");
             
-            _methods["DeleteFile"] = args =>
+            RegisterMethod("DeleteFile", args =>
             {
                 if (args.Length > 0 && args[0] is string filename)
                 {
                     DeleteFile(filename);
                 }
                 return null;
-            };
+            }, 1, 1, "Delete a file");
             
-            _methods["ReadFile"] = args =>
+            RegisterMethod("ReadFile", args =>
             {
                 if (args.Length > 0 && args[0] is string filename)
                 {
                     return ReadFile(filename);
                 }
                 return Array.Empty<string>();
-            };
+            }, 1, 1, "Read file contents");
             
-            _methods["GetFileInfo"] = args =>
+            RegisterMethod("GetFileInfo", args =>
             {
                 if (args.Length > 0 && args[0] is string filename)
                 {
                     GetFileInfo(filename);
                 }
                 return null;
-            };
+            }, 1, 1, "Get file information");
             
-            _methods["CopyFile"] = args =>
+            RegisterMethod("CopyFile", args =>
             {
                 if (args.Length >= 2 && args[0] is string source && args[1] is string dest)
                 {
                     CopyFile(source, dest);
                 }
                 return null;
-            };
+            }, 2, 2, "Copy a file");
             
-            _methods["MoveFile"] = args =>
+            RegisterMethod("MoveFile", args =>
             {
                 if (args.Length >= 2 && args[0] is string source && args[1] is string dest)
                 {
                     MoveFile(source, dest);
                 }
                 return null;
-            };
+            }, 2, 2, "Move/Rename a file");
+            
+            RegisterMethod("Close", args =>
+            {
+                Close();
+                return null;
+            }, 0, 0, "Close any open file");
+            
+            LogInfo("IO Package initialized");
         }
 
         private bool CheckRateLimit()
         {
-            if (_fileOperationCount++ > MaxFileOperations)
+            lock (_rateLock)
             {
-                Console.WriteLine("⚠️ Too many file operations. Please slow down.");
-                return false;
+                if (DateTime.UtcNow > _rateLimitReset)
+                {
+                    _fileOperationCount = 0;
+                    _rateLimitReset = DateTime.UtcNow.AddHours(1);
+                }
+                
+                if (_fileOperationCount++ > MaxFileOperations)
+                {
+                    LogWarning("Too many file operations. Please slow down.");
+                    return false;
+                }
+                return true;
             }
-            return true;
+        }
+
+        private bool CheckDiskSpace(string path)
+        {
+            try
+            {
+                string root = Path.GetPathRoot(path) ?? ".";
+                var drive = new DriveInfo(root);
+                
+                // Need at least 1MB free
+                if (drive.AvailableFreeSpace < 1024 * 1024)
+                {
+                    LogWarning($"Low disk space on {root}. Operation cancelled.");
+                    return false;
+                }
+                return true;
+            }
+            catch
+            {
+                // If we can't check disk space, assume it's ok
+                return true;
+            }
+        }
+
+        private void LogError(string message, Exception? ex = null, bool showUserMessage = true)
+        {
+            string fullMessage = ex != null ? $"{message}: {ex.Message}" : message;
+            
+            // Rotate log if too large
+            try
+            {
+                if (File.Exists(_logPath) && new FileInfo(_logPath).Length > 1024 * 1024)
+                {
+                    string backupPath = _logPath + ".old";
+                    if (File.Exists(backupPath))
+                        File.Delete(backupPath);
+                    File.Move(_logPath, backupPath);
+                }
+                
+                File.AppendAllText(_logPath, $"{DateTime.Now:yyyy-MM-dd HH:mm:ss} - {fullMessage}\n");
+            }
+            catch
+            {
+                // Can't log, ignore
+            }
+            
+            LogError(fullMessage); // Call base class LogError
+            
+            if (showUserMessage)
+                Console.WriteLine($"❌ {message}");
         }
 
         private string? CreateFile(string filename, string? path = null)
         {
+            if (string.IsNullOrWhiteSpace(filename))
+            {
+                LogWarning("Filename cannot be empty");
+                return null;
+            }
+            
             if (!CheckRateLimit()) return null;
 
-            try
+            lock (_fileLock)
             {
-                // Validate filename
-                if (!SecurePath.IsValidFileName(filename))
-                    throw FileError.InvalidCharacters(filename);
+                try
+                {
+                    if (!SecurePath.IsValidFileName(filename))
+                        throw FileError.InvalidCharacters(filename);
 
-                string safePath = path == null ? "." : SecurePath.Sanitize(path);
-                string fullPath = Path.Combine(safePath, filename);
-                
-                if (!fullPath.EndsWith(".txt"))
-                    fullPath += ".txt";
+                    string safePath = path == null ? "." : SecurePath.Sanitize(path);
+                    
+                    if (!CheckDiskSpace(safePath))
+                        return null;
+                    
+                    string fullPath = Path.Combine(safePath, filename);
+                    
+                    // Don't auto-add .txt extension
+                    
+                    // Check if file already exists
+                    if (File.Exists(fullPath))
+                    {
+                        LogWarning($"File '{filename}' already exists");
+                        return null;
+                    }
 
-                // Create empty file
-                File.WriteAllText(fullPath, "");
-                Console.WriteLine($"📁 Created file: {Path.GetFileName(fullPath)}");
-                
-                return fullPath;
-            }
-            catch (UnauthorizedAccessException)
-            {
-                throw FileError.AccessDenied(filename);
-            }
-            catch (Exception ex)
-            {
-                LogError($"Error creating file: {ex.Message}");
-                return null;
+                    // Create empty file
+                    File.WriteAllText(fullPath, "");
+                    LogInfo($"Created file: {Path.GetFileName(fullPath)}");
+                    
+                    return fullPath;
+                }
+                catch (UnauthorizedAccessException)
+                {
+                    throw FileError.AccessDenied(filename);
+                }
+                catch (Exception ex)
+                {
+                    LogError("Error creating file", ex);
+                    return null;
+                }
             }
         }
 
         private void BeginWrite(string filename)
         {
+            if (string.IsNullOrWhiteSpace(filename))
+            {
+                LogWarning("Filename cannot be empty");
+                return;
+            }
+            
             if (!CheckRateLimit()) return;
 
-            try
+            lock (_fileLock)
             {
-                if (!SecurePath.IsValidFileName(filename))
-                    throw FileError.InvalidCharacters(filename);
+                if (_inFileBlock)
+                {
+                    LogWarning("Already in a write block. Call EndWrite first.");
+                    return;
+                }
 
-                string safePath = SecurePath.Sanitize(filename);
-                _currentFile = safePath;
-                _inFileBlock = true;
-                _fileContent.Clear();
-            }
-            catch (Exception ex)
-            {
-                LogError($"Error beginning write: {ex.Message}");
+                try
+                {
+                    if (!SecurePath.IsValidFileName(filename))
+                        throw FileError.InvalidCharacters(filename);
+
+                    string safePath = SecurePath.Sanitize(filename);
+                    
+                    if (!CheckDiskSpace(safePath))
+                        return;
+
+                    _currentFile = safePath;
+                    _inFileBlock = true;
+                    _fileContent.Clear();
+                    LogInfo($"Started writing to: {Path.GetFileName(safePath)}");
+                }
+                catch (Exception ex)
+                {
+                    LogError("Error beginning write", ex);
+                }
             }
         }
 
         private void WriteLine(string content)
         {
-            if (!_inFileBlock || _currentFile == null)
+            lock (_fileLock)
             {
-                Console.WriteLine("⚠️ No file opened for writing");
-                return;
-            }
+                if (!_inFileBlock || _currentFile == null)
+                {
+                    LogWarning("No file opened for writing");
+                    return;
+                }
 
-            if (_fileContent.Count >= SecurePath.MaxLines)
-            {
-                Console.WriteLine("⚠️ Too many lines, stopping at 10000");
-                return;
-            }
+                if (!CheckDiskSpace(_currentFile))
+                {
+                    _inFileBlock = false;
+                    _fileContent.Clear();
+                    _currentFile = null;
+                    return;
+                }
 
-            _fileContent.Add(content);
+                if (_fileContent.Count >= SecurePath.MaxLines)
+                {
+                    LogWarning($"Too many lines, stopping at {SecurePath.MaxLines}");
+                    return;
+                }
+
+                _fileContent.Add(content);
+            }
         }
 
         private void Write(string content)
         {
-            if (!_inFileBlock || _currentFile == null)
+            lock (_fileLock)
             {
-                Console.WriteLine("⚠️ No file opened for writing");
-                return;
-            }
+                if (!_inFileBlock || _currentFile == null)
+                {
+                    LogWarning("No file opened for writing");
+                    return;
+                }
 
-            if (_fileContent.Count == 0)
-                _fileContent.Add(content);
-            else
-                _fileContent[_fileContent.Count - 1] += content;
+                if (!CheckDiskSpace(_currentFile))
+                {
+                    _inFileBlock = false;
+                    _fileContent.Clear();
+                    _currentFile = null;
+                    return;
+                }
+
+                if (_fileContent.Count == 0)
+                    _fileContent.Add(content);
+                else
+                    _fileContent[_fileContent.Count - 1] += content;
+            }
         }
 
         private void EndWrite()
         {
-            if (_currentFile == null || _fileContent.Count == 0)
-                return;
-
-            try
+            lock (_fileLock)
             {
-                // Check total size
-                long totalSize = 0;
-                foreach (var line in _fileContent)
-                    totalSize += System.Text.Encoding.UTF8.GetByteCount(line) + 2; // +2 for \r\n
-
-                if (totalSize > SecurePath.MaxFileSize)
+                if (_currentFile == null || _fileContent.Count == 0)
                 {
-                    Console.WriteLine($"⚠️ File too large (max {SecurePath.MaxFileSize / 1024 / 1024} MB)");
+                    _inFileBlock = false;
+                    _currentFile = null;
                     return;
                 }
 
-                File.WriteAllLines(_currentFile, _fileContent);
-                Console.WriteLine($"💾 Saved: {Path.GetFileName(_currentFile)}");
+                try
+                {
+                    // Check total size
+                    long totalSize = 0;
+                    foreach (var line in _fileContent)
+                        totalSize += System.Text.Encoding.UTF8.GetByteCount(line) + 2;
+
+                    if (totalSize > SecurePath.MaxFileSize)
+                    {
+                        LogWarning($"File too large (max {SecurePath.MaxFileSize / 1024 / 1024} MB)");
+                        return;
+                    }
+
+                    if (!CheckDiskSpace(_currentFile))
+                        return;
+
+                    File.WriteAllLines(_currentFile, _fileContent);
+                    LogInfo($"Saved: {Path.GetFileName(_currentFile)}");
+                }
+                catch (Exception ex)
+                {
+                    LogError("Error saving file", ex);
+                }
+                finally
+                {
+                    _inFileBlock = false;
+                    _fileContent.Clear();
+                    _currentFile = null;
+                }
             }
-            catch (Exception ex)
+        }
+
+        private void Close()
+        {
+            lock (_fileLock)
             {
-                LogError($"Error saving file: {ex.Message}");
-            }
-            finally
-            {
-                _inFileBlock = false;
-                _fileContent.Clear();
+                if (_inFileBlock)
+                {
+                    LogWarning("Force closing file without saving");
+                    _inFileBlock = false;
+                    _fileContent.Clear();
+                    _currentFile = null;
+                }
             }
         }
 
@@ -262,34 +432,50 @@ namespace Fminusminus.Utils.Package
                 
                 if (!Directory.Exists(safePath))
                 {
-                    Console.WriteLine($"❌ Directory not found: {path}");
+                    LogWarning($"Directory not found: {path}");
                     return;
                 }
 
                 var files = Directory.GetFiles(safePath);
                 var dirs = Directory.GetDirectories(safePath);
 
-                Console.WriteLine($"\n📁 Contents of '{path}':");
+                LogInfo($"Contents of '{path}':");
                 Console.WriteLine($"   Total: {dirs.Length} folders, {files.Length} files\n");
 
-                foreach (var dir in dirs)
+                foreach (var dir in dirs.OrderBy(d => d))
                     Console.WriteLine($"   📂 {Path.GetFileName(dir)}/");
                     
-                foreach (var file in files)
+                foreach (var file in files.OrderBy(f => f))
                 {
                     var info = SecurePath.GetSafeFileInfo(file);
-                    Console.WriteLine($"   📄 {info.Name} ({info.Size} bytes)");
+                    Console.WriteLine($"   📄 {info.Name} ({FormatFileSize(info.Size)})");
                 }
                 Console.WriteLine();
             }
             catch (Exception ex)
             {
-                LogError($"Error listing files: {ex.Message}");
+                LogError("Error listing files", ex);
             }
+        }
+
+        private string FormatFileSize(long bytes)
+        {
+            string[] sizes = { "B", "KB", "MB", "GB" };
+            double len = bytes;
+            int order = 0;
+            while (len >= 1024 && order < sizes.Length - 1)
+            {
+                order++;
+                len /= 1024;
+            }
+            return $"{len:0.##} {sizes[order]}";
         }
 
         private bool FileExists(string filename)
         {
+            if (string.IsNullOrWhiteSpace(filename))
+                return false;
+                
             try
             {
                 if (!SecurePath.IsValidFileName(filename))
@@ -306,6 +492,12 @@ namespace Fminusminus.Utils.Package
 
         private void DeleteFile(string filename)
         {
+            if (string.IsNullOrWhiteSpace(filename))
+            {
+                LogWarning("Filename cannot be empty");
+                return;
+            }
+            
             try
             {
                 if (!SecurePath.IsValidFileName(filename))
@@ -316,17 +508,23 @@ namespace Fminusminus.Utils.Package
                 if (File.Exists(safePath))
                 {
                     File.Delete(safePath);
-                    Console.WriteLine($"🗑️ Deleted: {Path.GetFileName(safePath)}");
+                    LogInfo($"Deleted: {Path.GetFileName(safePath)}");
                 }
             }
             catch (Exception ex)
             {
-                LogError($"Error deleting file: {ex.Message}");
+                LogError("Error deleting file", ex);
             }
         }
 
         private string[] ReadFile(string filename)
         {
+            if (string.IsNullOrWhiteSpace(filename))
+            {
+                LogWarning("Filename cannot be empty");
+                return Array.Empty<string>();
+            }
+            
             try
             {
                 if (!SecurePath.IsValidFileName(filename))
@@ -336,13 +534,13 @@ namespace Fminusminus.Utils.Package
                 
                 if (!File.Exists(safePath))
                 {
-                    Console.WriteLine($"❌ File not found: {filename}");
+                    LogWarning($"File not found: {filename}");
                     return Array.Empty<string>();
                 }
 
                 if (!SecurePath.IsFileSizeValid(safePath))
                 {
-                    Console.WriteLine($"⚠️ File too large (max {SecurePath.MaxFileSize / 1024 / 1024} MB)");
+                    LogWarning($"File too large (max {SecurePath.MaxFileSize / 1024 / 1024} MB)");
                     return Array.Empty<string>();
                 }
 
@@ -350,13 +548,19 @@ namespace Fminusminus.Utils.Package
             }
             catch (Exception ex)
             {
-                LogError($"Error reading file: {ex.Message}");
+                LogError("Error reading file", ex);
                 return Array.Empty<string>();
             }
         }
 
         private void GetFileInfo(string filename)
         {
+            if (string.IsNullOrWhiteSpace(filename))
+            {
+                LogWarning("Filename cannot be empty");
+                return;
+            }
+            
             try
             {
                 if (!SecurePath.IsValidFileName(filename))
@@ -367,25 +571,31 @@ namespace Fminusminus.Utils.Package
                 if (File.Exists(safePath))
                 {
                     var info = SecurePath.GetSafeFileInfo(safePath);
-                    Console.WriteLine($"\n📄 File: {info.Name}");
-                    Console.WriteLine($"   Size: {info.Size} bytes");
+                    LogInfo($"File: {info.Name}");
+                    Console.WriteLine($"   Size: {FormatFileSize(info.Size)}");
                     Console.WriteLine($"   Created: {info.CreationTime}");
                     Console.WriteLine($"   Modified: {info.LastWriteTime}");
                     Console.WriteLine($"   Read-only: {info.IsReadOnly}");
                 }
                 else
                 {
-                    Console.WriteLine($"❌ File not found: {filename}");
+                    LogWarning($"File not found: {filename}");
                 }
             }
             catch (Exception ex)
             {
-                LogError($"Error getting file info: {ex.Message}");
+                LogError("Error getting file info", ex);
             }
         }
 
         private void CopyFile(string source, string dest)
         {
+            if (string.IsNullOrWhiteSpace(source) || string.IsNullOrWhiteSpace(dest))
+            {
+                LogWarning("Source and destination cannot be empty");
+                return;
+            }
+            
             try
             {
                 if (!SecurePath.IsValidFileName(source) || !SecurePath.IsValidFileName(dest))
@@ -394,29 +604,45 @@ namespace Fminusminus.Utils.Package
                 string safeSource = SecurePath.Sanitize(source);
                 string safeDest = SecurePath.Sanitize(dest);
 
+                // Verify both paths are within working directory
+                string baseDir = Environment.CurrentDirectory;
+                if (!safeSource.StartsWith(baseDir) || !safeDest.StartsWith(baseDir))
+                {
+                    throw new UnauthorizedAccessException("Cannot copy files outside working directory");
+                }
+
                 if (!File.Exists(safeSource))
                 {
-                    Console.WriteLine($"❌ Source file not found: {source}");
+                    LogWarning($"Source file not found: {source}");
                     return;
                 }
 
                 if (!SecurePath.IsFileSizeValid(safeSource))
                 {
-                    Console.WriteLine($"⚠️ Source file too large to copy");
+                    LogWarning("Source file too large to copy");
                     return;
                 }
 
+                if (!CheckDiskSpace(safeDest))
+                    return;
+
                 File.Copy(safeSource, safeDest, true);
-                Console.WriteLine($"📋 Copied: {Path.GetFileName(safeSource)} → {Path.GetFileName(safeDest)}");
+                LogInfo($"Copied: {Path.GetFileName(safeSource)} → {Path.GetFileName(safeDest)}");
             }
             catch (Exception ex)
             {
-                LogError($"Error copying file: {ex.Message}");
+                LogError("Error copying file", ex);
             }
         }
 
         private void MoveFile(string source, string dest)
         {
+            if (string.IsNullOrWhiteSpace(source) || string.IsNullOrWhiteSpace(dest))
+            {
+                LogWarning("Source and destination cannot be empty");
+                return;
+            }
+            
             try
             {
                 if (!SecurePath.IsValidFileName(source) || !SecurePath.IsValidFileName(dest))
@@ -425,36 +651,41 @@ namespace Fminusminus.Utils.Package
                 string safeSource = SecurePath.Sanitize(source);
                 string safeDest = SecurePath.Sanitize(dest);
 
+                // Verify both paths are within working directory
+                string baseDir = Environment.CurrentDirectory;
+                if (!safeSource.StartsWith(baseDir) || !safeDest.StartsWith(baseDir))
+                {
+                    throw new UnauthorizedAccessException("Cannot move files outside working directory");
+                }
+
                 if (!File.Exists(safeSource))
                 {
-                    Console.WriteLine($"❌ Source file not found: {source}");
+                    LogWarning($"Source file not found: {source}");
                     return;
                 }
 
-                File.Move(safeSource, safeDest, true);
-                Console.WriteLine($"📦 Moved: {Path.GetFileName(safeSource)} → {Path.GetFileName(safeDest)}");
+                if (File.Exists(safeDest))
+                {
+                    LogWarning($"Destination already exists: {dest}");
+                    return;
+                }
+
+                if (!CheckDiskSpace(safeDest))
+                    return;
+
+                File.Move(safeSource, safeDest);
+                LogInfo($"Moved: {Path.GetFileName(safeSource)} → {Path.GetFileName(safeDest)}");
             }
             catch (Exception ex)
             {
-                LogError($"Error moving file: {ex.Message}");
+                LogError("Error moving file", ex);
             }
         }
 
-        private void LogError(string message)
+        public override void Dispose()
         {
-            // Log to file for debugging (safe, no sensitive info)
-            try
-            {
-                string logPath = Path.Combine(Environment.CurrentDirectory, "fminus-error.log");
-                File.AppendAllText(logPath, $"{DateTime.Now}: {message}\n");
-            }
-            catch
-            {
-                // Can't log, ignore
-            }
-            
-            // Show user-friendly message
-            Console.WriteLine($"❌ An error occurred. Check fminus-error.log for details.");
+            Close();
+            base.Dispose();
         }
     }
 }
