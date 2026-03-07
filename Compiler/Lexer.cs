@@ -1,6 +1,7 @@
 using System;
 using System.Collections.Generic;
 using System.Text;
+using Fminusminus.Errors;
 
 namespace Fminusminus
 {
@@ -58,7 +59,7 @@ namespace Fminusminus
         private int _current = 0;
         private int _line = 1;
         private int _column = 1;
-        private readonly List<string> _errors = new();
+        private readonly List<SyntaxError> _errors = new();
 
         private static readonly Dictionary<string, TokenType> _keywords = new()
         {
@@ -71,7 +72,9 @@ namespace Fminusminus
             { "println", TokenType.PRINTLN },
             { "at", TokenType.AT },
             { "io", TokenType.IO },
-            { "memory", TokenType.MEMORY }
+            { "memory", TokenType.MEMORY },
+            { "OS", TokenType.IDENTIFIER },
+            { "path", TokenType.IDENTIFIER }
         };
 
         public Lexer(string source)
@@ -84,13 +87,22 @@ namespace Fminusminus
             while (!IsAtEnd())
             {
                 _start = _current;
-                ScanToken();
+                try
+                {
+                    ScanToken();
+                }
+                catch (SyntaxError ex)
+                {
+                    _errors.Add(ex);
+                    // Recovery - skip to next line
+                    while (!IsAtEnd() && Peek() != '\n') Advance();
+                }
             }
 
             _tokens.Add(new Token(TokenType.EOF, "", null, _line, _column));
             
             if (_errors.Count > 0)
-                throw new Exception(string.Join("\n", _errors));
+                throw new AggregateException("Lexer errors occurred", _errors);
             
             return _tokens;
         }
@@ -115,7 +127,12 @@ namespace Fminusminus
                 
                 // Operators
                 case '+': AddToken(TokenType.PLUS); break;
-                case '-': AddToken(TokenType.MINUS); break;
+                case '-': 
+                    if (Match('-'))
+                        AddToken(TokenType.MINUS);  // -- handled as two minuses
+                    else
+                        AddToken(TokenType.MINUS);
+                    break;
                 case '*': AddToken(TokenType.STAR); break;
                 case '/': 
                     if (Match('/'))
@@ -144,8 +161,7 @@ namespace Fminusminus
                     if (Match('='))
                         AddToken(TokenType.NOT_EQUAL);
                     else
-                        AddToken(TokenType.ERROR, "Unexpected '!'");
-                    break;
+                        throw SyntaxError.UnexpectedSymbol(_line, _column, c);
                 case '<':
                     AddToken(Match('=') ? TokenType.LESS_EQUAL : TokenType.LESS);
                     break;
@@ -194,7 +210,7 @@ namespace Fminusminus
                     }
                     else
                     {
-                        _errors.Add($"fmm002: Unexpected character '{c}' at line {_line}, column {_column}");
+                        throw SyntaxError.UnexpectedSymbol(_line, _column, c);
                     }
                     break;
             }
@@ -218,11 +234,18 @@ namespace Fminusminus
             {
                 Advance(); // Consume '.'
                 while (char.IsDigit(Peek())) Advance();
-                AddToken(TokenType.NUMBER, double.Parse(_source.Substring(_start, _current - _start)));
+                
+                if (!double.TryParse(_source.Substring(_start, _current - _start), out double value))
+                    throw SyntaxError.InvalidNumber(_line, _column, _source.Substring(_start, _current - _start));
+                
+                AddToken(TokenType.NUMBER, value);
             }
             else
             {
-                AddToken(TokenType.NUMBER, int.Parse(_source.Substring(_start, _current - _start)));
+                if (!int.TryParse(_source.Substring(_start, _current - _start), out int value))
+                    throw SyntaxError.InvalidNumber(_line, _column, _source.Substring(_start, _current - _start));
+                
+                AddToken(TokenType.NUMBER, value);
             }
         }
 
@@ -232,7 +255,12 @@ namespace Fminusminus
             
             while (Peek() != '"' && !IsAtEnd())
             {
-                if (Peek() == '\n') _line++;
+                if (Peek() == '\n') 
+                {
+                    _line++;
+                    _column = 1;
+                }
+                
                 if (Peek() == '\\')
                 {
                     Advance();
@@ -246,10 +274,7 @@ namespace Fminusminus
             }
             
             if (IsAtEnd())
-            {
-                _errors.Add($"fmm002: Unterminated string at line {_line}");
-                return;
-            }
+                throw SyntaxError.UnterminatedString(_line, _column);
             
             Advance(); // Consume closing "
             AddToken(TokenType.STRING, sb.ToString());
@@ -261,7 +286,11 @@ namespace Fminusminus
             
             while (Peek() != '"' && !IsAtEnd())
             {
-                if (Peek() == '\n') _line++;
+                if (Peek() == '\n') 
+                {
+                    _line++;
+                    _column = 1;
+                }
                 
                 if (Peek() == '{')
                 {
@@ -292,10 +321,7 @@ namespace Fminusminus
             }
             
             if (IsAtEnd())
-            {
-                _errors.Add($"fmm002: Unterminated interpolated string at line {_line}");
-                return;
-            }
+                throw SyntaxError.UnterminatedString(_line, _column);
             
             Advance(); // Consume closing "
             AddToken(TokenType.STRING_INTERPOLATED, sb.ToString());
