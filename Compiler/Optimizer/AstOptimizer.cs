@@ -1,223 +1,320 @@
 using System;
+using System.IO;
 using System.Collections.Generic;
-using System.Linq;
+using Fminusminus.CodeGen;
+using Fminusminus.Optimizer;
 
-namespace Fminusminus.Optimizer
+namespace Fminusminus
 {
-    /// <summary>
-    /// AST Optimizer for F--
-    /// Performs various optimization passes on the Abstract Syntax Tree
-    /// </summary>
-    public class AstOptimizer
+    class Program
     {
-        private readonly CodeGenerator.OptimizationLevel _level;
-        private int _optimizationsApplied;
-
-        public AstOptimizer(CodeGenerator.OptimizationLevel level)
+        static int Main(string[] args)
         {
-            _level = level;
-        }
+            PrintLogo();
 
-        public ProgramNode Optimize(ProgramNode ast)
-        {
-            _optimizationsApplied = 0;
-            Console.WriteLine($"🔧 Applying optimizations (level {_level})...");
-
-            var optimized = ast;
-
-            // Basic optimizations always applied
-            optimized = RemoveDeadCode(optimized);
-            optimized = ConstantFolding(optimized);
-
-            if (_level >= CodeGenerator.OptimizationLevel.O1)
+            if (args.Length == 0)
             {
-                optimized = ConstantPropagation(optimized);
-                optimized = RemoveUnusedVariables(optimized);
+                ShowHelp();
+                return 1;
             }
 
-            if (_level >= CodeGenerator.OptimizationLevel.O2)
+            string command = args[0].ToLower();
+            
+            try
             {
-                optimized = InlineFunctions(optimized);
-                optimized = LoopOptimizations(optimized);
-            }
-
-            if (_level >= CodeGenerator.OptimizationLevel.O3)
-            {
-                optimized = AggressiveOptimizations(optimized);
-            }
-
-            Console.WriteLine($"✅ Applied {_optimizationsApplied} optimizations");
-            return optimized;
-        }
-
-        #region Basic Optimizations (Always applied)
-
-        /// <summary>
-        /// Remove code that will never be executed
-        /// </summary>
-        private ProgramNode RemoveDeadCode(ProgramNode program)
-        {
-            if (program.StartBlock == null) return program;
-
-            var newStatements = new List<StatementNode>();
-            bool afterReturn = false;
-
-            foreach (var stmt in program.StartBlock.Statements)
-            {
-                if (afterReturn)
+                switch (command)
                 {
-                    // This code is dead - remove it
-                    _optimizationsApplied++;
-                    Console.WriteLine($"  ✂️ Removed dead code after return");
-                    continue;
-                }
-
-                if (stmt is ReturnStatementNode)
-                {
-                    afterReturn = true;
-                }
-
-                newStatements.Add(stmt);
-            }
-
-            program.StartBlock.Statements = newStatements;
-            return program;
-        }
-
-        /// <summary>
-        /// Evaluate constant expressions at compile time
-        /// </summary>
-        private ProgramNode ConstantFolding(ProgramNode program)
-        {
-            // This is a simplified version - would need to traverse all expressions
-            // For now, just handle basic cases
-            return program;
-        }
-
-        #endregion
-
-        #region Level O1 Optimizations
-
-        /// <summary>
-        /// Propagate constant values through variables
-        /// </summary>
-        private ProgramNode ConstantPropagation(ProgramNode program)
-        {
-            if (program.StartBlock == null) return program;
-
-            var constants = new Dictionary<string, object>();
-
-            foreach (var stmt in program.StartBlock.Statements)
-            {
-                if (stmt is AssignmentNode assign && assign.Value is NumberLiteralNode num)
-                {
-                    constants[assign.VariableName] = num.Value;
-                }
-                else if (stmt is AssignmentNode assign2 && assign2.Value is StringLiteralNode str)
-                {
-                    constants[assign2.VariableName] = str.Value;
-                }
-                // Would need to replace variable uses with constants
-            }
-
-            return program;
-        }
-
-        /// <summary>
-        /// Remove variables that are never used
-        /// </summary>
-        private ProgramNode RemoveUnusedVariables(ProgramNode program)
-        {
-            if (program.StartBlock == null) return program;
-
-            var usedVars = new HashSet<string>();
-            var definedVars = new HashSet<string>();
-
-            // First pass: find all variable uses and definitions
-            foreach (var stmt in program.StartBlock.Statements)
-            {
-                if (stmt is AssignmentNode assign)
-                {
-                    definedVars.Add(assign.VariableName);
-                }
-                else if (stmt is PrintlnStatementNode println && println.Expression is VariableNode var)
-                {
-                    usedVars.Add(var.Name);
-                }
-                else if (stmt is PrintStatementNode print && print.Expression is VariableNode var2)
-                {
-                    usedVars.Add(var2.Name);
+                    case "run":
+                        if (args.Length < 2)
+                        {
+                            Console.WriteLine("Error: Missing filename");
+                            return 1;
+                        }
+                        return RunFile(args[1]);
+                        
+                    case "ast":
+                        if (args.Length < 2)
+                        {
+                            Console.WriteLine("Error: Missing filename");
+                            return 1;
+                        }
+                        return ShowAST(args[1]);
+                        
+                    case "codegen":
+                        if (args.Length < 2)
+                        {
+                            Console.WriteLine("Error: Missing filename");
+                            return 1;
+                        }
+                        string target = args.Length > 2 ? args[2] : "cil";
+                        string optLevel = args.Length > 3 ? args[3] : "o1";
+                        return GenerateCode(args[1], target, optLevel);
+                        
+                    case "--version":
+                    case "-v":
+                        ShowVersion();
+                        return 0;
+                        
+                    case "--help":
+                    case "-h":
+                        ShowHelp();
+                        return 0;
+                        
+                    default:
+                        // Assume it's a filename (run mode)
+                        return RunFile(args[0]);
                 }
             }
-
-            // Second pass: remove unused assignments
-            var newStatements = new List<StatementNode>();
-            foreach (var stmt in program.StartBlock.Statements)
+            catch (AggregateException ex)
             {
-                if (stmt is AssignmentNode assign && !usedVars.Contains(assign.VariableName))
+                Console.ForegroundColor = ConsoleColor.Red;
+                Console.WriteLine("\n❌ Multiple errors occurred:");
+                foreach (var inner in ex.InnerExceptions)
                 {
-                    _optimizationsApplied++;
-                    Console.WriteLine($"  ✂️ Removed unused variable: {assign.VariableName}");
-                    continue; // Skip this assignment
+                    Console.WriteLine($"   • {inner.Message}");
                 }
-                newStatements.Add(stmt);
+                Console.ResetColor();
+                return 1;
+            }
+            catch (Exception ex)
+            {
+                Console.ForegroundColor = ConsoleColor.Red;
+                Console.WriteLine($"\n❌ Error: {ex.Message}");
+                Console.ResetColor();
+                return 1;
+            }
+        }
+
+        static void PrintLogo()
+        {
+            Console.WriteLine(@"
+    ╔══════════════════════════════════════╗
+    ║  ███████╗  ███╗   ███╗  ██╗██╗      ║
+    ║  ██╔════╝  ████╗ ████║  ██║██║      ║
+    ║  █████╗    ██╔████╔██║  ██║██║      ║
+    ║  ██╔══╝    ██║╚██╔╝██║  ██║██║      ║
+    ║  ██║       ██║ ╚═╝ ██║  ██║██║      ║
+    ║  ╚═╝       ╚═╝     ╚═╝  ╚═╝╚═╝      ║
+    ║                                      ║
+    ║     F-- PROGRAMMING LANGUAGE         ║
+    ║        Version 2.0.0.0-alpha1        ║
+    ║     Created by RealMG (13 tuổi)      ║
+    ║    Contributors: chaunguyen12477     ║
+    ╚══════════════════════════════════════╝
+            ");
+        }
+
+        static int RunFile(string filename)
+        {
+            if (!File.Exists(filename))
+            {
+                Console.WriteLine($"fmm004: File not found: {filename}");
+                return 1;
             }
 
-            program.StartBlock.Statements = newStatements;
-            return program;
+            Console.WriteLine($"\u001b[36m▶ Running: {filename}\u001b[0m\n");
+            
+            string code = File.ReadAllText(filename);
+            
+            // Lexer
+            Console.WriteLine("\u001b[33m[1/4] Lexing...\u001b[0m");
+            var lexer = new Lexer(code);
+            var tokens = lexer.ScanTokens();
+            Console.WriteLine($"      ✓ Found {tokens.Count} tokens");
+            
+            // Parser
+            Console.WriteLine("\u001b[33m[2/4] Parsing...\u001b[0m");
+            var parser = new Parser(tokens);
+            var ast = parser.Parse();
+            Console.WriteLine($"      ✓ AST generated");
+            
+            // Interpreter
+            Console.WriteLine("\u001b[33m[3/4] Interpreting...\u001b[0m");
+            var interpreter = new Interpreter();
+            int result = interpreter.Execute(ast);
+            
+            // Result
+            Console.WriteLine("\u001b[33m[4/4] Done!\u001b[0m");
+            
+            if (result == 0)
+            {
+                Console.WriteLine($"\n\u001b[32m✅ Program completed with exit code: {result}\u001b[0m");
+            }
+            else
+            {
+                Console.WriteLine($"\n\u001b[33m⚠ Program completed with exit code: {result}\u001b[0m");
+            }
+            
+            return result;
         }
 
-        #endregion
-
-        #region Level O2 Optimizations
-
-        /// <summary>
-        /// Inline small functions
-        /// </summary>
-        private ProgramNode InlineFunctions(ProgramNode program)
+        static int ShowAST(string filename)
         {
-            // Would need function definitions first
-            return program;
+            if (!File.Exists(filename))
+            {
+                Console.WriteLine($"fmm004: File not found: {filename}");
+                return 1;
+            }
+
+            string code = File.ReadAllText(filename);
+            
+            var lexer = new Lexer(code);
+            var tokens = lexer.ScanTokens();
+            
+            var parser = new Parser(tokens);
+            var ast = parser.Parse();
+            
+            Console.WriteLine("\n\u001b[36m=== Abstract Syntax Tree ===\u001b[0m\n");
+            ast.Print();
+            
+            return 0;
         }
 
-        /// <summary>
-        /// Loop optimizations (invariant code motion, etc.)
-        /// </summary>
-        private ProgramNode LoopOptimizations(ProgramNode program)
+        static int GenerateCode(string filename, string target, string optLevel)
         {
-            // Would need loops first
-            return program;
+            if (!File.Exists(filename))
+            {
+                Console.WriteLine($"fmm004: File not found: {filename}");
+                return 1;
+            }
+
+            string code = File.ReadAllText(filename);
+            
+            Console.WriteLine($"\u001b[36m▶ Generating code for {filename}\u001b[0m\n");
+            
+            // Lexer
+            Console.WriteLine("\u001b[33m[1/4] Lexing...\u001b[0m");
+            var lexer = new Lexer(code);
+            var tokens = lexer.ScanTokens();
+            Console.WriteLine($"      ✓ Found {tokens.Count} tokens");
+            
+            // Parser
+            Console.WriteLine("\u001b[33m[2/4] Parsing...\u001b[0m");
+            var parser = new Parser(tokens);
+            var ast = parser.Parse();
+            Console.WriteLine($"      ✓ AST generated");
+            
+            // Map target string to enum
+            var targetMap = new Dictionary<string, CodeGenerator.TargetPlatform>(StringComparer.OrdinalIgnoreCase)
+            {
+                ["cil"] = CodeGenerator.TargetPlatform.CIL,
+                ["il"] = CodeGenerator.TargetPlatform.CIL,
+                ["c"] = CodeGenerator.TargetPlatform.C,
+                ["js"] = CodeGenerator.TargetPlatform.JavaScript,
+                ["javascript"] = CodeGenerator.TargetPlatform.JavaScript,
+                ["py"] = CodeGenerator.TargetPlatform.Python,
+                ["python"] = CodeGenerator.TargetPlatform.Python,
+                ["f--"] = CodeGenerator.TargetPlatform.Fminus,
+                ["fminus"] = CodeGenerator.TargetPlatform.Fminus
+            };
+
+            // Map optimization string to enum
+            var optMap = new Dictionary<string, AstOptimizer.OptimizationLevel>(StringComparer.OrdinalIgnoreCase)
+            {
+                ["o0"] = AstOptimizer.OptimizationLevel.O0,
+                ["o1"] = AstOptimizer.OptimizationLevel.O1,
+                ["o2"] = AstOptimizer.OptimizationLevel.O2,
+                ["o3"] = AstOptimizer.OptimizationLevel.O3,
+                ["none"] = AstOptimizer.OptimizationLevel.O0,
+                ["basic"] = AstOptimizer.OptimizationLevel.O1,
+                ["aggressive"] = AstOptimizer.OptimizationLevel.O2,
+                ["max"] = AstOptimizer.OptimizationLevel.O3
+            };
+
+            if (!targetMap.ContainsKey(target))
+            {
+                Console.WriteLine($"\u001b[31m❌ Unknown target: {target}\u001b[0m");
+                Console.WriteLine("   Available targets: cil, c, js, py, f--");
+                return 1;
+            }
+
+            if (!optMap.ContainsKey(optLevel))
+            {
+                Console.WriteLine($"\u001b[31m❌ Unknown optimization level: {optLevel}\u001b[0m");
+                Console.WriteLine("   Available levels: o0, o1, o2, o3");
+                return 1;
+            }
+
+            var targetEnum = targetMap[target];
+            var optEnum = optMap[optLevel];
+
+            Console.WriteLine($"\u001b[33m[3/4] Optimizing (level {optLevel})...\u001b[0m");
+            Console.WriteLine($"\u001b[33m[4/4] Generating {target} code...\u001b[0m");
+
+            var driver = new CodeGenDriver(ast, targetEnum, optEnum, saveToFile: true);
+            var generatedCode = driver.Generate();
+            
+            Console.WriteLine($"\n\u001b[32m✅ Code generation successful!\u001b[0m");
+            
+            // Show preview of generated code
+            Console.WriteLine("\n\u001b[36m=== Generated Code Preview ===\u001b[0m");
+            var lines = generatedCode.Split('\n');
+            int previewLines = Math.Min(10, lines.Length);
+            for (int i = 0; i < previewLines; i++)
+            {
+                Console.WriteLine($"  {lines[i]}");
+            }
+            if (lines.Length > 10)
+            {
+                Console.WriteLine($"  ... ({lines.Length - 10} more lines)");
+            }
+
+            return 0;
         }
 
-        #endregion
-
-        #region Level O3 Optimizations
-
-        /// <summary>
-        /// Aggressive optimizations
-        /// </summary>
-        private ProgramNode AggressiveOptimizations(ProgramNode program)
+        static void ShowVersion()
         {
-            // Advanced optimizations:
-            // - Loop unrolling
-            // - Vectorization
-            // - Tail recursion elimination
-            // - etc.
-            return program;
+            Console.WriteLine("F-- Programming Language v2.0.0.0-alpha1");
+            Console.WriteLine("Copyright (c) 2026 RealMG");
+            Console.WriteLine("License: MIT");
+            Console.WriteLine("\n\"The backward step of humanity, but forward step in creativity!\"");
+            Console.WriteLine("\nContributors:");
+            Console.WriteLine("  • realmg51-cpu (Creator, 13 years old)");
+            Console.WriteLine("  • chaunguyen12477-cmyk (Contributor)");
         }
 
-        #endregion
-
-        #region Helper Methods
-
-        /// <summary>
-        /// Print optimization statistics
-        /// </summary>
-        public void PrintStats()
+        static void ShowHelp()
         {
-            Console.WriteLine($"📊 Optimizations applied: {_optimizationsApplied}");
+            Console.WriteLine("F-- Programming Language - Usage Guide");
+            Console.WriteLine("========================================");
+            Console.WriteLine();
+            Console.WriteLine("📌 COMMANDS:");
+            Console.WriteLine();
+            Console.WriteLine("  run <file>           Run an F-- program");
+            Console.WriteLine("  ast <file>           Display Abstract Syntax Tree");
+            Console.WriteLine("  codegen <file> [target] [opt]  Generate code for other platforms");
+            Console.WriteLine("  --version, -v        Show version information");
+            Console.WriteLine("  --help, -h           Show this help message");
+            Console.WriteLine();
+            Console.WriteLine("🎯 CODEGEN TARGETS:");
+            Console.WriteLine("  cil        .NET Common Intermediate Language (default)");
+            Console.WriteLine("  c          C programming language");
+            Console.WriteLine("  js         JavaScript");
+            Console.WriteLine("  py         Python");
+            Console.WriteLine("  f--        F-- itself (self-hosting)");
+            Console.WriteLine();
+            Console.WriteLine("⚡ OPTIMIZATION LEVELS:");
+            Console.WriteLine("  o0         No optimization");
+            Console.WriteLine("  o1         Basic optimizations (default)");
+            Console.WriteLine("  o2         Aggressive optimizations");
+            Console.WriteLine("  o3         Maximum optimizations");
+            Console.WriteLine();
+            Console.WriteLine("📋 EXAMPLES:");
+            Console.WriteLine("  fminus run examples/hello.f--");
+            Console.WriteLine("  fminus ast examples/hello.f--");
+            Console.WriteLine("  fminus codegen examples/hello.f-- c");
+            Console.WriteLine("  fminus codegen examples/hello.f-- js o2");
+            Console.WriteLine("  fminus codegen examples/hello.f-- py");
+            Console.WriteLine();
+            Console.WriteLine("📁 PROJECT STRUCTURE:");
+            Console.WriteLine("  Compiler/     Source code");
+            Console.WriteLine("  examples/     Example programs");
+            Console.WriteLine("  docs/         Documentation");
+            Console.WriteLine();
+            Console.WriteLine("🌐 RESOURCES:");
+            Console.WriteLine("  GitHub: https://github.com/realmg51-cpu/F--Programming-Language");
+            Console.WriteLine("  NuGet: https://www.nuget.org/packages/Fminusminus");
+            Console.WriteLine("  Discord: https://discord.gg/fminus (coming soon)");
         }
-
-        #endregion
     }
 }
